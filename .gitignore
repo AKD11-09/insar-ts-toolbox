@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env
+
+# QGIS junk
+*.qgz
+*.qgs
+*.db
+*.sqlite
+*.log
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build/dist
+dist/
+build/
+*.egg-info/
+
+# Secrets
+secrets.json
+*.pem
+*.key

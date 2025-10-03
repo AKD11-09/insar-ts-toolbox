@@ -1,0 +1,243 @@
+<ui version="4.0" >
+ <class>InSAR_TS_ToolboxDialogBase</class>
+ <widget class="QDialog" name="PSIClusteringDialogBase">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>626</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>PSIClustering</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainVLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tabClustering">
+      <attribute name="title">
+       <string>Clustering</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="clusterVLayout" stretch="0,0,1,0">
+       <item>
+        <layout class="QHBoxLayout" name="algorithmHLayout">
+         <item>
+          <widget class="QLabel" name="label_2">
+           <property name="font">
+            <font>
+             <family>Times New Roman</family>
+             <pointsize>12</pointsize>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="text">
+            <string>Clustering Algorithm</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboAlgorithm">
+           <property name="font">
+            <font>
+             <family>Times New Roman</family>
+             <pointsize>10</pointsize>
+            </font>
+           </property>
+           <item>
+            <property name="text">
+             <string>KMeans</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>DBSCAN</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="stackedParams">
+         <property name="currentIndex">
+          <number>2</number>
+         </property>
+         <widget class="QWidget" name="pageKMeans">
+          <layout class="QVBoxLayout" name="vKmeans">
+           <item>
+            <widget class="QGroupBox" name="groupKMeans">
+             <property name="font">
+              <font>
+               <family>Times New Roman</family>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="title">
+              <string>KMeans Parameters</string>
+             </property>
+             <layout class="QHBoxLayout" name="kmeansH">
+              <item>
+               <widget class="QLabel" name="labelkmeans">
+                <property name="text">
+                 <string>Number of Clusters</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSpinBox" name="spinKMeansClusters">
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>100</number>
+                </property>
+                <property name="value">
+                 <number>3</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="pageDBSCAN">
+          <layout class="QVBoxLayout" name="vDbscan">
+           <item>
+            <widget class="QGroupBox" name="groupDBSCAN">
+             <property name="font">
+              <font>
+               <family>Times New Roman</family>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="title">
+              <string>DBSCAN Parameters</string>
+             </property>
+             <layout class="QHBoxLayout" name="dbscanH">
+              <item>
+               <widget class="QLabel" name="labelMinPts">
+                <property name="text">
+                 <string>Min Samples</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSpinBox" name="spinDBSCANminPts">
+                <property name="value">
+                 <number>5</number>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelEps">
+                <property name="text">
+                 <string>Epsilon (eps)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QDoubleSpinBox" name="spinDBSCANeps">
+                <property name="keyboardTracking">
+                 <bool>false</bool>
+                </property>
+                <property name="decimals">
+                 <number>4</number>
+                </property>
+                <property name="minimum">
+                 <double>0.010000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>100.989999999999995</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.300000000000000</double>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="pageDTW">
+          <layout class="QVBoxLayout" name="vDtw"/>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_3">
+         <item>
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>Select  the Features for Clustering</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QListWidget" name="listFeatures"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnRunCluster">
+         <property name="text">
+          <string>Run Clustering</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabDataProps">
+      <attribute name="title">
+       <string>Data Properties</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="dataVLayout" stretch="0,0,1">
+       <item>
+        <widget class="QLabel" name="labelDP">
+         <property name="text">
+          <string>Compute statistics (mean/median/std/min/max/count) and inline histograms for a chosen layer/ROI.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="sp1">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnRunDataProps">
+         <property name="text">
+          <string>Run Data Properties</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
