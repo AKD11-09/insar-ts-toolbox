@@ -8,7 +8,8 @@
                              -------------------
         begin                : 2025-10-03
         git sha              : $Format:%H$
-        copyright            : (C) 2025 by Ashwin Kumar Dhanasekaran M. Sc.
+        author               : Ashwin Kumar Dhanasekaran M. Sc., Kourosh Shahryarinia M. Sc., Dr.-Ing. Mohammad Omidalizarandi
+        Copyright (C) 2025  Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, and Mohammad Omidalizarandi
         email                : ashwinkumard.11@gmail.com
  ***************************************************************************/
 

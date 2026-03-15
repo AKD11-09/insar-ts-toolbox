@@ -8,7 +8,8 @@
                               -------------------
         begin                : 2025-10-03
         git sha              : $Format:%H$
-        author               : Ashwin Kumar Dhanasekaran M.Sc.
+        author               : Ashwin Kumar Dhanasekaran M. Sc., Kourosh Shahryarinia M. Sc., Dr.-Ing. Mohammad Omidalizarandi
+        Copyright (C) 2025  Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, and Mohammad Omidalizarandi
         email                : ashwinkumard.11@gmail.com
  ***************************************************************************/
 
@@ -243,6 +244,7 @@ class TimeSeriesCanvas(FigureCanvas):
         super().__init__(self.fig)
         self.setParent(parent)
         
+        # ------------------- TOP: time series plot -------------------
         ax = self.fig.add_subplot(211)
         ax.plot(dates, values, linestyle='-', linewidth=1.2, label='_nolegend_')
         pts = ax.scatter(dates, values, marker='o', color='red', s=10, label='PS measurements')
@@ -255,8 +257,7 @@ class TimeSeriesCanvas(FigureCanvas):
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
         ax.tick_params(labelsize=9)
         
-        
-        # --- spectral analysis (FFT) with proper amplitude in mm ---
+        # ------------------- BOTTOM: spectral analysis -------------------
         # time → years from start
         t_days = np.array([(d - dates[0]).days for d in dates], dtype=float)
         t_yrs  = t_days / 365.25
@@ -269,63 +270,128 @@ class TimeSeriesCanvas(FigureCanvas):
         except Exception:
             y_detr = y_raw - np.nanmean(y_raw)
 
-        # window with Hann and compensate coherent gain (≈0.5 for Hann)
         N = len(y_detr)
+
+        # Default outputs for tiny series
         if N < 4:
-            dom_freqs = np.array([np.nan, np.nan, np.nan])
-            dom_amps  = np.array([np.nan, np.nan, np.nan])
+            freqs_cpy   = np.array([])
+            A           = np.array([])
+            method_used = "Not enough epochs for spectrum"
         else:
-            w  = np.hanning(N)
-            cg = w.mean() if np.isfinite(w.mean()) and w.mean() > 0 else 1.0
-            y  = (y_detr - np.nanmean(y_detr)) * w
+            # --- check sampling regularity ---
+            dt_vals = np.diff(t_days)
+            if dt_vals.size > 1:
+                dt_med = np.median(dt_vals)
+                dt_std = np.std(dt_vals)
+            else:
+                dt_med = 1.0
+                dt_std = 0.0
 
-            # sampling step in years (median for quasi-irregular sampling)
-            dt_days = np.median(np.diff(t_days))
-            if not np.isfinite(dt_days) or dt_days <= 0:
-                dt_days = 1.0
-            dt_yrs = dt_days / 365.25
+            IRREG_THRESHOLD = 0.05  # 5% relative std → consider irregular
+            is_irregular = (dt_std / dt_med) > IRREG_THRESHOLD if dt_med > 0 else False
 
-            # FFT → frequencies (cycles/year) and properly scaled amplitudes (mm)
-            Y = np.fft.rfft(y)
-            freqs_cpy = np.fft.rfftfreq(N, d=dt_yrs)      # cycles / year
-            A = (2.0 / (N * cg)) * np.abs(Y)              # amplitude in mm
-            if A.size > 0:
-                A[0] = 0.0                                # ignore DC
+            # Try to import Lomb–Scargle
+            try:
+                from scipy.signal import lombscargle
+                have_scipy = True
+            except Exception:
+                have_scipy = False
 
-            # pick 3 dominant components
-            idx_sorted = np.argsort(A)[::-1]
-            dom_freqs  = freqs_cpy[idx_sorted[:3]]
-            dom_amps   = A[idx_sorted[:3]]
+            freqs_cpy = None
+            A = None
 
+            # ---------------------------------------------------------
+            # CASE A: Irregular sampling  → Lomb–Scargle PSD (if SciPy)
+            # ---------------------------------------------------------
+            if is_irregular and have_scipy:
+                # frequency grid in cycles/year
+                f_ls = np.linspace(0.01, 6.0, 2000)  # adjust max freq if needed
+                w = 2.0 * np.pi * f_ls  # angular frequency [rad/year]
+
+                # Lomb–Scargle expects t in same units → t_yrs is fine
+                p_ls = lombscargle(t_yrs, y_detr - np.nanmean(y_detr), w, normalize=True)
+
+                # Convert power to amplitude (mm); scaling is approximate but OK for relative comparison
+                A = 2.0 * np.sqrt(p_ls)
+                freqs_cpy = f_ls
+                method_used = "Lomb–Scargle (irregular sampling)"
+
+            # ---------------------------------------------------------
+            # CASE B: Regular sampling or fallback → FFT
+            # ---------------------------------------------------------
+            if freqs_cpy is None or A is None:
+                # window with Hann and compensate coherent gain (≈0.5 for Hann)
+                w = np.hanning(N)
+                cg = w.mean() if np.isfinite(w.mean()) and w.mean() > 0 else 1.0
+                y = (y_detr - np.nanmean(y_detr)) * w
+
+                # sampling step in years (median)
+                dt_days = dt_med if (np.isfinite(dt_med) and dt_med > 0) else 1.0
+                dt_yrs = dt_days / 365.25
+
+                # FFT → frequencies (cycles/year) and properly scaled amplitudes (mm)
+                Y = np.fft.rfft(y)
+                freqs_cpy = np.fft.rfftfreq(N, d=dt_yrs)      # cycles / year
+                A = (2.0 / (N * cg)) * np.abs(Y)              # amplitude in mm
+                if A.size > 0:
+                    A[0] = 0.0                                # ignore DC
+
+                if is_irregular and not have_scipy:
+                    method_used = "FFT (SciPy not available, irregular sampling)"
+                else:
+                    method_used = "FFT (regular sampling)"
+
+        # --- pick top-k peaks with a minimum separation on the frequency axis ---
+        def _topk_with_min_sep(A_arr, f_arr, k=3, min_sep=0.5):
+            """Greedy selection of top-k indices in A (by amplitude) such that
+            the picked frequencies are at least min_sep apart."""
+            if A_arr.size == 0 or f_arr.size == 0:
+                return np.array([], dtype=int)
+            idx_all = np.arange(A_arr.size)
+            idx_sorted = idx_all[np.argsort(A_arr)[::-1]]
+            idx_sorted = [i for i in idx_sorted if i != 0]  # drop DC
+            chosen = []
+            for idx in idx_sorted:
+                if len(chosen) >= k:
+                    break
+                if not chosen:
+                    chosen.append(idx)
+                    continue
+                if np.all(np.abs(f_arr[idx] - f_arr[np.array(chosen)]) >= min_sep):
+                    chosen.append(idx)
+            return np.array(chosen, dtype=int)
+
+        # -------------------------------------------
         # --- spectrum plot ---
         ax2 = self.fig.add_subplot(212)
+        MIN_SEP_CPY = 0.5  # minimum spacing in cycles/year
 
-        if N < 4 or len(freqs_cpy) == 0:
+        if N < 4 or freqs_cpy is None or A is None or len(freqs_cpy) == 0:
             ax2.text(0.5, 0.5, "Not enough data for spectrum",
-                    ha="center", va="center", transform=ax2.transAxes)
+                     ha="center", va="center", transform=ax2.transAxes)
         else:
             ax2.plot(freqs_cpy, A, linewidth=1.6)
             if A.size > 1:
-                order = np.argsort(A[1:])[::-1] + 1  
-                topk = order[:3]
+                topk = _topk_with_min_sep(A, freqs_cpy, k=3, min_sep=MIN_SEP_CPY)
             else:
-                topk = np.array([0], dtype=int)
+                topk = np.array([], dtype=int)
             markers = ["o", "s", "^"]
             for i, idx in enumerate(topk):
                 fpk = float(freqs_cpy[idx])
                 apk = float(A[idx])
                 ax2.scatter([fpk], [apk], s=55, marker=markers[i % len(markers)],
                             label=f"{apk:.2f} mm @ {fpk:.3f} cpy", zorder=3)
-            if len(topk) > 0:
+            if topk.size > 0:
                 ax2.axvline(freqs_cpy[topk[0]], linestyle="--", linewidth=1.0, alpha=0.8)
 
-        ax2.set_xlabel("Frequency (cycles/year)", fontsize=10)
+        ax2.set_xlabel("Frequency (cycles/year) (cpr)", fontsize=10)
         ax2.set_ylabel("Amplitude (mm)", fontsize=10)
-        ax2.set_title("Amplitude Spectrum", fontsize=10, pad=4)
+        ax2.set_title(f"Amplitude Spectrum – {method_used}", fontsize=10, pad=4)
         ax2.grid(True, linestyle="--", alpha=0.35)
         leg = ax2.legend(loc="upper right", frameon=True, framealpha=0.9, fontsize=9)
         self.fig.tight_layout(pad=0.01, h_pad=0.01)
-        self.fig.subplots_adjust(left=0.1)  
+        self.fig.subplots_adjust(left=0.1)
+
 
 
 
@@ -631,13 +697,12 @@ from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
 
 # Time-series point picker tool
 class TSPointPickTool(QgsMapTool):
- 
-    picked = pyqtSignal(QgsFeature)
+    picked = pyqtSignal(object, QgsFeature)   # emits (layer, feature)
 
-    def __init__(self, canvas, layer, iface=None, pixel_tolerance=8):
+    def __init__(self, canvas, layers, iface=None, pixel_tolerance=8):
         super().__init__(canvas)
         self.canvas = canvas
-        self.layer = layer
+        self.layers = layers if isinstance(layers, (list, tuple)) else [layers]
         self.iface = iface
         self.pixel_tolerance = int(max(2, pixel_tolerance))
         self.setCursor(Qt.CrossCursor)
@@ -645,35 +710,68 @@ class TSPointPickTool(QgsMapTool):
     def canvasReleaseEvent(self, e):
         pt = self.toMapCoordinates(e.pos())
         tol_mu = self.pixel_tolerance * self.canvas.mapUnitsPerPixel()
-        rect = QgsRectangle(pt.x() - tol_mu, pt.y() - tol_mu, pt.x() + tol_mu, pt.y() + tol_mu)
-        req = QgsFeatureRequest().setFilterRect(rect)
-        feats = list(self.layer.getFeatures(req))
+        search_rect = QgsRectangle(pt.x() - tol_mu, pt.y() - tol_mu, pt.x() + tol_mu, pt.y() + tol_mu)
+        click_geom = QgsGeometry.fromPointXY(QgsPointXY(pt))
 
-        if not feats:
+        best = (None, None, float("inf"))  # (layer, feature, distance)
+
+        for lyr in self.layers:
+            # skip hidden / non-point layers just in case
             try:
-                if self.iface is not None:
-                    self.iface.messageBar().pushMessage(
-                        "TS Analysis",
-                        "No feature under cursor (try zooming in).",
-                        level=Qgis.Info,
-                        duration=2
-                    )
-                else:
-                    QgsMessageLog.logMessage("No feature under cursor (try zooming in).", "TS Analysis", Qgis.Info)
+                node = QgsProject.instance().layerTreeRoot().findLayer(lyr.id())
+                if not node or not node.isVisible() or lyr.geometryType() != QgsWkbTypes.PointGeometry:
+                    continue
             except Exception:
-                QgsMessageLog.logMessage("No feature under cursor (try zooming in).", "TS Analysis", Qgis.Info)
+                continue
+
+            req = QgsFeatureRequest().setFilterRect(search_rect)
+            feats = list(lyr.getFeatures(req))
+            if not feats:
+                continue
+
+            # nearest feature center to click
+            for ft in feats:
+                try:
+                    d = ft.geometry().closestSegmentWithContext(pt)[0]
+                except Exception:
+                    d = ft.geometry().distance(click_geom)
+                if d < best[2]:
+                    best = (lyr, ft, d)
+
+        if best[0] is None:
+            # nice message but non-blocking
+            try:
+                self.iface.messageBar().pushMessage(
+                    "TS Analysis", "No visible point feature under cursor.", level=Qgis.Info, duration=2
+                )
+            except Exception:
+                pass
             return
 
-        # pick the nearest feature center to the click
-        click_geom = QgsGeometry.fromPointXY(QgsPointXY(pt))
-        def _dist(ft):
-            try:
-                return ft.geometry().closestSegmentWithContext(pt)[0]
-            except Exception:
-                return ft.geometry().distance(click_geom)
+        self.picked.emit(best[0], best[1])
 
-        picked_ft = min(feats, key=_dist)
-        self.picked.emit(picked_ft)
+
+from qgis.PyQt.QtCore import QObject, QEvent
+
+class _DlgGuard(QObject):
+    """Stops TS picker when the toolbox dialog hides/closes on any platform/Qt build."""
+    def __init__(self, owner):
+        super().__init__()
+        self._owner = owner  # InSAR_TS_Toolbox instance
+
+    def eventFilter(self, obj, ev):
+        # Build a set of supported event types defensively
+        types = {QEvent.Hide, QEvent.Close, QEvent.WindowStateChange}
+        if hasattr(QEvent, "HideToParent"):   # not always present
+            types.add(getattr(QEvent, "HideToParent"))
+
+        if ev.type() in types:
+            try:
+                self._owner._stop_ts_pick()   # force-pan inside
+            except Exception:
+                pass
+        return False
+
 
 
 
@@ -691,8 +789,43 @@ class InSAR_TS_Toolbox:
 
     # ---------------- GUI ----------------
     def _ensure_dialog(self):
+        # --- remove any legacy guard/event filter from prior versions ---
+        try:
+            if getattr(self, "dlg", None) is not None and hasattr(self, "_dlgGuard") and self._dlgGuard:
+                try:
+                    self.dlg.removeEventFilter(self._dlgGuard)
+                except Exception:
+                    pass
+                self._dlgGuard = None
+        except Exception:
+            pass
         if self.dlg is None:
             self.dlg = InSAR_TS_ToolboxDialog()
+            # Ensure picker stops when dialog closes/hides, without event filters
+            def _wrap_close(ev):
+                try:
+                    self._stop_ts_pick()
+                finally:
+                    # call base implementation
+                    try:
+                        super(type(self.dlg), self.dlg).closeEvent(ev)
+                    except Exception:
+                        ev.accept()
+
+            def _wrap_hide(ev):
+                try:
+                    self._stop_ts_pick()
+                finally:
+                    try:
+                        super(type(self.dlg), self.dlg).hideEvent(ev)
+                    except Exception:
+                        ev.accept()
+
+            self.dlg.closeEvent = _wrap_close
+            self.dlg.hideEvent  = _wrap_hide
+
+            # Also for destruction via QObject::destroyed
+            self.dlg.destroyed.connect(lambda _obj=None: self._stop_ts_pick())
 
 
             self.dlg.resize(1000, 700)
@@ -711,11 +844,14 @@ class InSAR_TS_Toolbox:
 
             self.dlg.comboAlgorithm.currentTextChanged.connect(self.on_algorithm_changed)
             self.dlg.stackedParams.currentChanged.connect(self._on_params_page_changed)
-
+            
             # Inject TS Analysis tab entirely in code
             self._inject_ts_tab()
             self._inject_help_tab()
-
+            self.dlg.accepted.connect(self._stop_ts_pick)
+            self.dlg.rejected.connect(self._stop_ts_pick)
+            self.dlg.finished.connect(lambda _code: self._stop_ts_pick())
+          
         return self.dlg
 
     # --- TS Analysis tab (created in code) ---
@@ -792,6 +928,49 @@ class InSAR_TS_Toolbox:
         except Exception:
             pass
         self.btnPickTS.clicked.connect(self.start_ts_pick)
+    def _show_about_dialog(self):
+        from qgis.PyQt.QtWidgets import QMessageBox
+
+        text = f"""
+        <h2>InSAR-TS Toolbox</h2>
+        <p><b>Version:</b> 1.0.0 (2025-11-22)</p>
+
+        <p>This QGIS plugin was developed at the
+        Geodätisches Institut Hannover (GIH), Leibniz University Hannover, 
+        by Ashwin Kumar Dhanasekaran, M. Sc., in collaboration with Kourosh Shahryarinia and Dr.-Ing. Mohammad Omidalizarandi. 
+        </p>
+        <p>It provides a comprehensive suite of tools for 
+        processing and analyzing InSAR time-series data, including:</p>
+
+        <ul class="features">
+            <li><strong>Clustering Algorithms:</strong> For grouping and identifying areas with similar deformation characteristics.</li>
+            <li><strong>Statistical Analysis:</strong> To derive meaningful metrics and assess the quality of the time-series.</li>
+            <li><strong>Spectral Analysis:</strong> For characterizing and isolating temporal deformation signals.</li>
+        </ul>
+        <h3>Citation</h3>
+        <p>If you use InSAR-TS Toolbox in your research, please cite:</p>
+        <p>
+        A. K. Dhanasekaran, K. Shahryarinia, M. Omidalizarandi,  
+        <i>InSAR-TS Toolbox: A QGIS plugin for clustering and spectral analysis of
+        InSAR time series</i>, 2025 (in preparation).
+        </p>
+
+        <h3>Links</h3>
+        <ul>
+          <li><a href="{GITHUB_URL}">Source code on GitHub</a></li>
+          <li><a href="{GITHUB_URL}/issues">Bug reports &amp; feature requests</a></li>
+        </ul>
+
+        <p>&copy; 2025 – Ashwin Kumar Dhanasekaran et al.</p>
+        """
+
+        mb = QMessageBox(self.iface.mainWindow())
+        mb.setWindowTitle("About InSAR-TS Toolbox")
+        mb.setIcon(QMessageBox.Information)
+        mb.setTextFormat(Qt.RichText)
+        mb.setText(text)
+        mb.setStandardButtons(QMessageBox.Ok)
+        mb.exec_()
 
     def _inject_help_tab(self):
 
@@ -820,49 +999,110 @@ class InSAR_TS_Toolbox:
         code{{background:#f2f2f2;padding:1px 4px;border-radius:3px}}
         </style>
 
-        <h2>InSAR-TS Toolbox </h2>
+        <h2>InSAR-TS Toolbox</h2>
 
         <h3>Overview of Tabs</h3>
 
         <h4>Clustering</h4>
         <p>Select numeric fields from a point layer and run clustering with
-        <b>KMeans</b> or <b>DBSCAN</b>. Results are written to a <code>cluster_id</code>
-        field and visualized with automatic color symbology (noise is shown in grey).</p>
+        <b>KMeans</b> or <b>DBSCAN</b>. Results are written to the <code>cluster_id</code> field
+        and visualized with automatic color symbology (noise in grey).</p>
+
+        <ul>
+            <li>
+                <b>K-Means</b>: partitions points into <i>k</i> clusters by minimizing the 
+                distance to the cluster centroid.  
+                Best for compact, spherical clusters with similar variance.
+                <ul>
+                    <li><b>n_clusters</b>: number of clusters to create (must be chosen by user).</li>
+                </ul>
+            </li>
+
+            <li>
+                <b>DBSCAN</b>: density-based clustering that groups points with many neighbours
+                and labels isolated points as noise.  
+                Ideal for clusters of arbitrary shape and data with outliers.
+                <ul>
+                    <li><b>eps</b>: radius of the neighbourhood (distance threshold).</li>
+                    <li><b>min_samples</b>: minimum number of points required to form a dense region.</li>
+                </ul>
+            </li>
+
+            <li>
+                Learn more:
+                <a href="https://scikit-learn.org/stable/modules/clustering.html" target="_blank">
+                    scikit-learn clustering guide
+                </a>
+            </li>
+        </ul>
 
         <h4>Data Properties</h4>
         <p>Compute descriptive statistics (<i>mean, median, std, min, max, count</i>) for
-        selected fields, either across the whole layer or within a drawn rectangle (ROI).
-        Inline histograms are provided, with optional distribution fits
+        selected fields, either across the whole layer or within a region of interest (ROI).
+        Histograms are provided with optional distribution fits
         (Normal, Student-t, Uniform, Exponential, Chi-square).</p>
 
-        <h4>TS Analysis</h4>
+        <h4>Analysis</h4>
         <p>Click on a point feature in a time-series dataset to display its displacement
         time series and corresponding amplitude spectrum. The three strongest spectral peaks
         are automatically highlighted and reported in the legend.</p>
 
         <h4>Attributes</h4>
-        <p>The right-hand panel in TS Analysis lists all non-time-series attributes for the
-        selected feature. The information line above shows the layer name, feature ID, and
-        the number of epochs available.</p>
+        <p>The right-hand panel lists all attributes for the chosen feature.</p>
 
-         <h3>TS Analysis tips</h3>
-            <ul>
-            <li>Time is converted to years; detrending + Hann window reduce spectral leakage.</li>
-            <li>For irregular sampling, interpret high-frequency peaks cautiously.</li>
-            <li>Resize panels with the splitter: plots (left) and attributes (right).</li>
-            </ul>
+        <h4>TS Analysis Methods</h4>
+        <ul>
+        <li><b>FFT (Fast Fourier Transform)</b>: used when sampling is approximately regular.
+        Efficiently computes frequencies present in the time series.
+        <a href="https://en.wikipedia.org/wiki/Fast_Fourier_transform" target="_blank">Learn more</a></li>
 
-            <h3>Troubleshooting</h3>
-            <ul>
-            <li><b>No feature under cursor:</b> zoom in and try again (picker uses a small pixel tolerance).</li>
-            <li><b>No time-series fields found:</b> ensure fields are named like <code>YYYYMMDD</code> and contain numeric values.</li>
-            <li><b>Empty stats:</b> make sure numeric fields were selected and ROI contains features.</li>
-            </ul>
-            
-        <h3>More info</h3>
-        <p>Docs &amp; source on GitHub:
-        <a href="{GITHUB_URL}">{GITHUB_URL}</a></p>
+        <li><b>Lomb–Scargle Periodogram</b>: used when sampling is irregular (typical for InSAR).
+        Produces a frequency spectrum without requiring equally spaced measurements.
+        <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.lombscargle.html" target="_blank">Learn more</a></li>
+
+        <li>The toolbox automatically chooses the appropriate method based on sampling regularity.</li>
+        </ul>
+
+        <h4>TS Analysis Tips</h4>
+        <ul>
+            <li>
+                <b>Time normalization:</b>  
+                All acquisition dates are converted into decimal years relative to the first epoch.  
+                This provides a uniform time axis and makes frequency interpretation easier 
+                (e.g., 1 cycle/year ≈ annual signal).
+            </li>
+
+            <li>
+                <b>Detrending + Hann window:</b>  
+                The linear trend of the displacement time series is removed before spectral analysis.  
+                A Hann window is applied to suppress edge discontinuities, which reduces 
+                spectral leakage and gives more accurate frequency peaks.
+            </li>
+
+            <li>
+                <b>Automatic method selection (FFT vs. Lomb–Scargle):</b>  
+                The plugin checks the sampling intervals between acquisition dates:  
+                if they are approximately uniform, a Fast Fourier Transform (FFT) is used;  
+                if sampling is uneven (common in InSAR), the Lomb–Scargle periodogram is used.  
+                Lomb–Scargle is specifically designed for irregular time series and avoids the
+                distortions that FFT would produce in such cases.
+            </li>
+        </ul>
+
+        <h4>Troubleshooting</h4>
+        <ul>
+        <li><b>No feature under cursor</b>: zoom in and try again (picker uses a small pixel tolerance).</li>
+        <li><b>No time-series fields found</b>: ensure fields are named like <code>YYYYMMDD</code> and contain numeric values.</li>
+        <li><b>Empty stats</b>: ensure numeric fields were selected and ROI contains features.</li>
+        </ul>
+
+        <h4>More info</h4>
+ 
+        <p style="margin-top:10px;">
+          <a href="about:insar-ts-toolbox">About InSAR-TS Toolbox</a>
+        </p>
         """
+
 
         helpBox.setHtml(help_html)
         root.addWidget(helpBox, 1)
@@ -871,11 +1111,35 @@ class InSAR_TS_Toolbox:
 
 
     def _on_help_anchor_clicked(self, url: QUrl):
+        s = url.toString()
+        # internal "about" link from Help tab
+        if s.startswith("about:insar-ts-toolbox"):
+            self._show_about_dialog()
+            return
+
+        # everything else → open in browser
         try:
-            self._open_url_external(url.toString())
+            self._open_url_external(s)
         except Exception:
-            # fallback to default handler
-            QDesktopServices.openUrl(url)
+            QDesktopServices.openUrl(QUrl(s))
+
+
+    def _force_pan(self):
+        """Hard switch to Pan tool to guarantee picker is gone."""
+        try:
+            self.iface.actionPan().trigger()
+        except Exception:
+            pass
+
+    def _is_ts_pick_active(self):
+        try:
+            mt = self.iface.mapCanvas().mapTool()
+            # Avoid circular import: refer to class by name
+            return mt is not None and mt.__class__.__name__ == "TSPointPickTool"
+        except Exception:
+            return False
+
+
 
     def _open_url_external(self, url_str: str):
 
@@ -928,6 +1192,34 @@ class InSAR_TS_Toolbox:
         finally:
             self._rectTool = None
             self._prevTool = None
+    def _reset_ts_tab(self):
+        """Clear TS Analysis UI so the toolbox opens fresh."""
+        # stop any active pick tool
+        try:
+            self._stop_ts_pick()
+        except Exception:
+            pass
+
+        # clear plot container
+        container = getattr(self, 'frameTSPlot', None)
+        if container and container.layout():
+            for c in container.findChildren(QWidget):
+                c.setParent(None)
+                c.deleteLater()
+
+        # reset right-hand attributes panel
+        if hasattr(self, "featuresForm") and self.featuresForm:
+            while self.featuresForm.count():
+                item = self.featuresForm.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+
+        # reset info/btn text
+        if hasattr(self, 'lblTSInfo') and self.lblTSInfo:
+            self.lblTSInfo.setText("No point selected.")
+        if hasattr(self, 'btnPickTS') and self.btnPickTS:
+            self.btnPickTS.setText("Pick a point on map")
 
     def initGui(self):
         icon = QIcon(os.path.join(os.path.dirname(__file__), "icon.png"))
@@ -935,13 +1227,36 @@ class InSAR_TS_Toolbox:
         self.action.triggered.connect(self.run)
         self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("InSAR-TS Toolbox", self.action)
+    def _is_layer_visible(self, layer) -> bool:
+        try:
+            node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
+            return bool(node and node.isVisible())
+        except Exception:
+            # If we can't resolve visibility (shouldn't happen), be conservative
+            return False
 
     def unload(self):
+        try:
+            if getattr(self, "dlg", None) is not None and hasattr(self, "_dlgGuard") and self._dlgGuard:
+                try:
+                    self.dlg.removeEventFilter(self._dlgGuard)
+                except Exception:
+                    pass
+                self._dlgGuard = None
+        except Exception:
+            pass
+        try:
+            self._stop_ts_pick()
+        except Exception:
+            pass
+        self._reset_ts_tab()
         self.iface.removePluginMenu("InSAR-TS Toolbox", self.action)
         self.iface.removeToolBarIcon(self.action)
 
+
     def run(self):
         self._ensure_dialog()
+        self._reset_ts_tab()
         self.populate_feature_combo()
         self.on_algorithm_changed(self.dlg.comboAlgorithm.currentText())
         self.dlg.show()
@@ -1155,6 +1470,23 @@ class InSAR_TS_Toolbox:
             self.featuresForm.addRow(key_lbl, val_lbl)
 
         # -------- TS Analysis (pick & plot) --------
+    def _visible_point_layers_in_render_order(self):
+        root = QgsProject.instance().layerTreeRoot()
+        # Prefer render order from the layer tree (top-first)
+        try:
+            render_order = list(root.layerOrder())  # list[QgsMapLayer]
+        except Exception:
+            # Fallback: whatever order we can get
+            render_order = [n.layer() for n in root.findLayers()]
+
+        result = []
+        for lyr in render_order:
+            if isinstance(lyr, QgsVectorLayer) and lyr.geometryType() == QgsWkbTypes.PointGeometry:
+                node = root.findLayer(lyr.id())
+                if node and node.isVisible():
+                    result.append(lyr)
+        return result
+
     def start_ts_pick(self):
         layer = self.iface.activeLayer()
         if self._tsPickTool: 
@@ -1165,12 +1497,17 @@ class InSAR_TS_Toolbox:
             QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
                                 "Please select a point layer as active.")
             return
-
+        
+        if not self._is_layer_visible(layer):
+            QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
+                                f"Active layer '{layer.name()}' is hidden. "
+                                "Make it visible in the Layers panel to pick points.")
+            return
         canvas = self.iface.mapCanvas()
         self._prevTool = canvas.mapTool()
         self._tsPickTool = TSPointPickTool(self.iface.mapCanvas(), layer, iface=self.iface, pixel_tolerance=8)
 
-        self._tsPickTool.picked.connect(lambda f: self._on_ts_point_picked(layer, f))
+        self._tsPickTool.picked.connect(self._on_ts_point_picked)
         canvas.setMapTool(self._tsPickTool)
 
         if hasattr(self, 'lblTSInfo') and self.lblTSInfo:
@@ -1179,26 +1516,40 @@ class InSAR_TS_Toolbox:
             self.btnPickTS.setText("Stop picking")
 
     def _stop_ts_pick(self):
-
+        canvas = self.iface.mapCanvas()
         try:
-            canvas = self.iface.mapCanvas()
-            if getattr(self, "_tsPickTool", None) and canvas.mapTool() is self._tsPickTool:
-                canvas.unsetMapTool(self._tsPickTool)
+            mt = canvas.mapTool()
+
+            # If our attribute holds a tool and it's active, unset it
+            if getattr(self, "_tsPickTool", None) and mt is self._tsPickTool:
+                try:
+                    canvas.unsetMapTool(self._tsPickTool)
+                except Exception:
+                    pass
+
+            # Belt-and-suspenders: if ANY TSPointPickTool is active, unset it
+            if mt is not None and mt.__class__.__name__ == "TSPointPickTool":
+                try:
+                    canvas.unsetMapTool(mt)
+                except Exception:
+                    pass
+
         except Exception:
             pass
         finally:
+            # Always switch to Pan as a safe default
+            self._force_pan()
+
+            # Drop refs so GC can collect the tool
             self._tsPickTool = None
-            if getattr(self, "_prevTool", None):
-                try:
-                    self.iface.mapCanvas().setMapTool(self._prevTool)
-                except Exception:
-                    pass
             self._prevTool = None
 
+            # UI text reset
             if hasattr(self, 'lblTSInfo') and self.lblTSInfo:
                 self.lblTSInfo.setText("Picking stopped.")
             if hasattr(self, 'btnPickTS') and self.btnPickTS:
                 self.btnPickTS.setText("Pick a point on map")
+
 
     def _restore_tool_after_ts(self):
         try:

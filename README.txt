@@ -1,32 +1,96 @@
-Plugin Builder Results
+InSAR-TS Toolbox
+================
 
-Your plugin InSAR_TS_Toolbox was created in:
-    A:/HiWi/qgis_code\insar_ts_toolbox
+A QGIS plugin for time series analysis of InSAR data (Persistent Scatterer and Distributed Scatterer points).
+It provides clustering, descriptive statistics, spectral analysis, and visualization tools for InSAR time series data within QGIS.
 
-Your QGIS plugin directory is located at:
-    C:/Users/Ashwin/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
+QGIS Compatibility: 3.x and above
+Python Version: 3.9 or later
+License: GPL-2.0-or-later
 
-What's Next:
+-------------------------------------------------------------------------------
+OVERVIEW OF TABS
+-------------------------------------------------------------------------------
 
-  * Copy the entire directory containing your new plugin to the QGIS plugin
-    directory
+Clustering:
+    Select numeric fields from a point layer and run clustering using KMeans or DBSCAN.
+    Results are stored in a cluster_id field and visualized with automatic color symbology (noise in grey).
 
-  * Compile the resources file using pyrcc5
+Data Properties:
+    Compute descriptive statistics (mean, median, std, min, max, count) for selected fields,
+    across the whole layer or within a selected rectangle (ROI). Inline histograms are available.
 
-  * Run the tests (``make test``)
+TS Analysis:
+    Click on a point feature to display its displacement time series and amplitude spectrum.
+    The three strongest spectral peaks are highlighted and listed.
 
-  * Test the plugin by enabling it in the QGIS plugin manager
+Attributes:
+    Lists non-time-series attributes for the selected feature, including layer name, feature ID,
+    and number of epochs available.
 
-  * Customize it by editing the implementation file: ``insar_ts_toolbox.py``
+-------------------------------------------------------------------------------
+INSTALLATION
+-------------------------------------------------------------------------------
 
-  * Create your own custom icon, replacing the default icon.png
+1. Download or clone this repository:
+       git clone https://github.com/AKD11-09/insar-ts-toolbox.git
 
-  * Modify your user interface by opening InSAR_TS_Toolbox_dialog_base.ui in Qt Designer
+2. In QGIS, open:
+       Plugins → Manage and Install Plugins → Install from ZIP
 
-  * You can use the Makefile to compile your Ui and resource files when
-    you make changes. This requires GNU make (gmake)
+3. Select the plugin ZIP and install.
 
-For more information, see the PyQGIS Developer Cookbook at:
-http://www.qgis.org/pyqgis-cookbook/index.html
+-------------------------------------------------------------------------------
+DEPENDENCIES
+-------------------------------------------------------------------------------
 
-(C) 2011-2018 GeoApt LLC - geoapt.com
+The InSAR-TS Toolbox relies on several Python libraries for numerical analysis, clustering,
+and visualization. Most of these are already included in standard QGIS 3.x installations.
+
+Required Python packages:
+    - numpy
+    - pandas
+    - matplotlib
+    - scikit-learn
+    - scipy
+    - seaborn
+    - statsmodels
+
+Installation of missing libraries:
+
+Windows (OSGeo4W Shell):
+    pip install numpy pandas matplotlib scikit-learn scipy seaborn statsmodels
+
+Linux / macOS:
+    pip3 install numpy pandas matplotlib scikit-learn scipy seaborn statsmodels
+
+Notes:
+    - All imports are handled gracefully inside the plugin. If a required library is missing,
+      QGIS will display a message such as:
+          "Missing dependency: numpy – please install it via pip."
+    - No external binaries or compiled extensions are required.
+    - Tested on Python 3.9+ and QGIS 3.0 and later.
+
+-------------------------------------------------------------------------------
+TROUBLESHOOTING
+-------------------------------------------------------------------------------
+
+- No feature under cursor: zoom in and retry.
+- No time-series fields: ensure fields are named like YYYYMMDD and numeric.
+- Empty stats: ensure numeric fields were selected and ROI contains features.
+
+-------------------------------------------------------------------------------
+SUPPORT & ISSUES
+-------------------------------------------------------------------------------
+
+Report bugs and feature requests at:
+    https://github.com/AKD11-09/insar-ts-toolbox/issues
+
+-------------------------------------------------------------------------------
+AUTHORS
+-------------------------------------------------------------------------------
+
+Ashwin Kumar Dhanasekaran
+Mohammad Omidalizarandi
+Kourosh Shahryarinia
+Institute of Geodesy (GIH), Leibniz University Hannover, Germany

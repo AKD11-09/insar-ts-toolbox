@@ -1,5 +1,6 @@
-<ui version="4.0" >
- <class>InSAR_TS_ToolboxDialogBase</class>
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PSIClusteringDialogBase</class>
  <widget class="QDialog" name="PSIClusteringDialogBase">
   <property name="geometry">
    <rect>
@@ -65,7 +66,7 @@
        <item>
         <widget class="QStackedWidget" name="stackedParams">
          <property name="currentIndex">
-          <number>2</number>
+          <number>1</number>
          </property>
          <widget class="QWidget" name="pageKMeans">
           <layout class="QVBoxLayout" name="vKmeans">
@@ -147,6 +148,9 @@
               </item>
               <item>
                <widget class="QDoubleSpinBox" name="spinDBSCANeps">
+                <property name="locale">
+                 <locale language="English" country="India"/>
+                </property>
                 <property name="keyboardTracking">
                  <bool>false</bool>
                 </property>
