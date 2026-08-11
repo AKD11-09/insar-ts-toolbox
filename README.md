@@ -47,3 +47,17 @@ The information line shows the layer name, feature ID, and the number of epochs 
 1. Clone this repository:
    ```bash
    git clone https://github.com/AKD11-09/insar-ts-toolbox.git
+   ```
+2. Copy the `insar_ts_toolbox` folder into your QGIS plugin directory:
+   ```
+   <QGIS profile>/python/plugins/
+   ```
+3. Enable **InSAR-TS Toolbox** in *Plugins → Manage and Install Plugins*.
+
+---
+
+## 🙏 Acknowledgements
+
+Developed at the **Geodätisches Institut Hannover (GIH)**, Leibniz University Hannover.
+
+This work was supported by a **DAAD (German Academic Exchange Service) Research Grant**.

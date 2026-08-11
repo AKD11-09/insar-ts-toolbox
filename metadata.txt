@@ -7,7 +7,7 @@ license=GPL-2.0-or-later
 author=Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, Mohammad Omidalizarandi
 email=ashwinkumard.11@gmail.com, kourosh.shahryari@gih.uni-hannover.de, zarandi@gih.uni-hannover.de
 
-about=InSAR-TS Toolbox provides tools for processing, analyzing, and visualizing InSAR time-series data.
+about=InSAR-TS Toolbox provides tools for processing, analyzing, and visualizing InSAR time-series data. Developed at the Geodätisches Institut Hannover (GIH), Leibniz University Hannover. This work was supported by a DAAD (German Academic Exchange Service) Research Grant.
 
 tracker=https://github.com/AKD11-09/insar-ts-toolbox/issues
 repository=https://github.com/AKD11-09/insar-ts-toolbox

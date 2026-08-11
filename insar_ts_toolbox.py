@@ -947,6 +947,12 @@ class InSAR_TS_Toolbox:
             <li><strong>Statistical Analysis:</strong> To derive meaningful metrics and assess the quality of the time-series.</li>
             <li><strong>Spectral Analysis:</strong> For characterizing and isolating temporal deformation signals.</li>
         </ul>
+        <h3>Acknowledgements</h3>
+        <p>Developed at the Geodätisches Institut Hannover (GIH),
+        Leibniz University Hannover.</p>
+        <p>This work was supported by a DAAD (German Academic Exchange Service)
+        Research Grant.</p>
+
         <h3>Citation</h3>
         <p>If you use InSAR-TS Toolbox in your research, please cite:</p>
         <p>
@@ -1096,8 +1102,13 @@ class InSAR_TS_Toolbox:
         <li><b>Empty stats</b>: ensure numeric fields were selected and ROI contains features.</li>
         </ul>
 
+        <h4>Acknowledgements</h4>
+        <p>Developed at the Geodätisches Institut Hannover (GIH),
+        Leibniz University Hannover. This work was supported by a
+        DAAD (German Academic Exchange Service) Research Grant.</p>
+
         <h4>More info</h4>
- 
+
         <p style="margin-top:10px;">
           <a href="about:insar-ts-toolbox">About InSAR-TS Toolbox</a>
         </p>
