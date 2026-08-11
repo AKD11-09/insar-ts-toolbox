@@ -37,13 +37,15 @@ from matplotlib.ticker import MaxNLocator, EngFormatter
 from matplotlib import dates as mdates
 
 # Qt
-from qgis.PyQt.QtCore import Qt, pyqtSignal, QVariant, QTimer, QUrl, QProcess, QSettings
+from qgis.PyQt.QtCore import (
+    Qt, pyqtSignal, QVariant, QTimer, QUrl, QProcess, QSettings, QObject, QEvent
+)
 from qgis.PyQt.QtGui import QIcon, QColor, QDesktopServices
 from qgis.PyQt.QtWidgets import (
-    QAction, QMessageBox, QFileDialog, QPushButton, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QCheckBox, QListWidget, QListWidgetItem, QDialogButtonBox, QComboBox,
-    QSpinBox, QTextBrowser, QScrollArea, QWidget, QTabWidget, QGroupBox, QHBoxLayout, QTextBrowser, QSizePolicy, QComboBox,QSplitter, 
-    QFormLayout, QFrame, QSizePolicy,QMessageBox, QCheckBox
+    QAction, QMessageBox, QFileDialog, QPushButton, QDialog, QVBoxLayout,
+    QHBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem,
+    QDialogButtonBox, QComboBox, QSpinBox, QTextBrowser, QScrollArea, QWidget,
+    QTabWidget, QGroupBox, QSizePolicy, QSplitter, QFormLayout, QFrame
 )
 
 # QGIS core/gui
@@ -77,11 +79,6 @@ def _plugin_version():
 
 PLUGIN_VERSION = _plugin_version()
 
-# Matplotlib (Qt canvas)
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.ticker import MaxNLocator, EngFormatter
-from matplotlib import dates as mdates
 
 # Send a message to QGIS log (and stdout as fallback)
 def _log(msg):
@@ -91,9 +88,11 @@ def _log(msg):
         print('[InSAR-TS Toolbox]', msg)
 
 # Rectangle map tool for area selection
+
+
 class RectangleMapTool(QgsMapTool):
     rectangleSelected = pyqtSignal(QgsRectangle)
-    
+
     def __init__(self, canvas):
         super().__init__(canvas)
         self.canvas = canvas
@@ -134,6 +133,8 @@ class RectangleMapTool(QgsMapTool):
         super().deactivate()
 
 # Dialog to select layer and area option
+
+
 class LayerAreaDialog(QDialog):
 
     def __init__(self, iface, parent=None):
@@ -163,6 +164,8 @@ class LayerAreaDialog(QDialog):
         return self.layers[self.cmbLayer.currentIndex()]
 
 # Dialog to select fields and statistics
+
+
 class StatsChoiceDialog(QDialog):
     def __init__(self, layer, parent=None):
         super().__init__(parent)
@@ -179,13 +182,13 @@ class StatsChoiceDialog(QDialog):
         layout.addWidget(self.listFields)
 
         layout.addWidget(QLabel("Statistics:"))
-        self.chkMean   = QCheckBox("Mean")
+        self.chkMean = QCheckBox("Mean")
         self.chkMedian = QCheckBox("Median")
-        self.chkStd    = QCheckBox("Std. Dev.")
-        self.chkMin    = QCheckBox("Min")
-        self.chkMax    = QCheckBox("Max")
-        self.chkCount  = QCheckBox("Count")
-        self.chkHist   = QCheckBox("Histogram")
+        self.chkStd = QCheckBox("Std. Dev.")
+        self.chkMin = QCheckBox("Min")
+        self.chkMax = QCheckBox("Max")
+        self.chkCount = QCheckBox("Count")
+        self.chkHist = QCheckBox("Histogram")
 
         for w in (self.chkMean, self.chkMedian, self.chkStd, self.chkMin, self.chkMax, self.chkCount, self.chkHist):
             layout.addWidget(w)
@@ -220,8 +223,11 @@ class StatsChoiceDialog(QDialog):
         )
 
 # Embedded Matplotlib histogram (Qt canvas)
+
+
 class HistogramCanvas(FigureCanvas):
     """Embedded Matplotlib histogram (Qt canvas) with optional PDF overlay."""
+
     def __init__(self, vals, field_name, bins=20, parent=None, width=4.2, height=1.8, dpi=110):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         super().__init__(self.fig)
@@ -253,13 +259,15 @@ class HistogramCanvas(FigureCanvas):
         self.fig.canvas.draw_idle()
 
 # Embedded Matplotlib time-series (Qt canvas)
+
+
 class TimeSeriesCanvas(FigureCanvas):
 
     def __init__(self, dates, values, title="", parent=None, width=8.0, height=3.0, dpi=110):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         super().__init__(self.fig)
         self.setParent(parent)
-        
+
         # ------------------- TOP: time series plot -------------------
         ax = self.fig.add_subplot(211)
         ax.plot(dates, values, linestyle='-', linewidth=1.2, label='_nolegend_')
@@ -272,12 +280,12 @@ class TimeSeriesCanvas(FigureCanvas):
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
         ax.tick_params(labelsize=9)
-        
+
         # ------------------- BOTTOM: spectral analysis -------------------
         # time → years from start
         t_days = np.array([(d - dates[0]).days for d in dates], dtype=float)
-        t_yrs  = t_days / 365.25
-        y_raw  = np.asarray(values, dtype=float)
+        t_yrs = t_days / 365.25
+        y_raw = np.asarray(values, dtype=float)
 
         # detrend (linear) to reduce leakage
         try:
@@ -290,8 +298,8 @@ class TimeSeriesCanvas(FigureCanvas):
 
         # Default outputs for tiny series
         if N < 4:
-            freqs_cpy   = np.array([])
-            A           = np.array([])
+            freqs_cpy = np.array([])
+            A = np.array([])
             method_used = "Not enough epochs for spectrum"
         else:
             # --- check sampling regularity ---
@@ -409,8 +417,6 @@ class TimeSeriesCanvas(FigureCanvas):
         self.fig.subplots_adjust(left=0.1)
 
 
-
-
 # --- Data Properties Results Dialog ---
 class DataPropsResultsDialog(QDialog):
 
@@ -419,18 +425,21 @@ class DataPropsResultsDialog(QDialog):
         self.setWindowTitle(title)
 
         try:
-            import scipy.stats as _st  
+            import scipy.stats as _st
             self._have_scipy = True
         except Exception:
             self._have_scipy = False
 
-        self.cards = []  
+        self.cards = []
         root = QVBoxLayout(self)
-        scroll = QScrollArea(self); scroll.setWidgetResizable(True)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
         root.addWidget(scroll, 1)
-        host = QWidget(); scroll.setWidget(host)
-        v = QVBoxLayout(host); v.setContentsMargins(6, 6, 6, 6); v.setSpacing(10)
-
+        host = QWidget()
+        scroll.setWidget(host)
+        v = QVBoxLayout(host)
+        v.setContentsMargins(6, 6, 6, 6)
+        v.setSpacing(10)
 
         for idx, sec in enumerate(sections):
             name = sec.get("name", "")
@@ -438,8 +447,10 @@ class DataPropsResultsDialog(QDialog):
             vals = vals[np.isfinite(vals)]
             bins = int(sec.get("bins", 20))
 
-            box = QGroupBox(name); box_l = QHBoxLayout(box)
-            box_l.setContentsMargins(8, 8, 8, 8); box_l.setSpacing(10)
+            box = QGroupBox(name)
+            box_l = QHBoxLayout(box)
+            box_l.setContentsMargins(8, 8, 8, 8)
+            box_l.setSpacing(10)
 
             # LEFT: stats HTML
             stats = QTextBrowser(box)
@@ -447,17 +458,18 @@ class DataPropsResultsDialog(QDialog):
             stats.setStyleSheet("font-size: 11.5pt;")
             stats.setHtml(sec.get("html", ""))
             stats.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-            stats.setMinimumWidth(260); stats.setMaximumWidth(380)
+            stats.setMinimumWidth(260)
+            stats.setMaximumWidth(380)
 
             # RIGHT: controls + histogram
-            right = QWidget(box); rlay = QVBoxLayout(right)
+            right = QWidget(box)
+            rlay = QVBoxLayout(right)
             rlay.setContentsMargins(0, 0, 0, 0)
 
             # Dist selector
             row = QHBoxLayout()
             row.addWidget(QLabel("Distribution:"))
             combo = QComboBox(right)
-
 
             combo.addItem("Normal")
             combo.addItem("Uniform")             # NEW
@@ -468,12 +480,11 @@ class DataPropsResultsDialog(QDialog):
             else:
                 combo.setToolTip("SciPy not available; Chi-square and Student-t disabled")
 
-
-
             row.addStretch(1)
             row.addWidget(combo)
             rlay.addLayout(row)
-            canvas = HistogramCanvas(vals, name, bins=bins, parent=right, width=5.8, height=1.9, dpi=110)
+            canvas = HistogramCanvas(vals, name, bins=bins, parent=right,
+                                     width=5.8, height=1.9, dpi=110)
             canvas.setMinimumHeight(190)
             rlay.addWidget(canvas, 1)
             box_l.addWidget(stats, 0)
@@ -484,12 +495,11 @@ class DataPropsResultsDialog(QDialog):
             ))
 
             # Connect callback
-            combo.setProperty("card_index", idx) 
+            combo.setProperty("card_index", idx)
             combo.currentIndexChanged.connect(self._on_combo_changed)
 
             # Initial fit (Normal)
             self._apply_distribution(idx, combo.currentText())
-
 
         v.addStretch(1)
         btns = QDialogButtonBox(QDialogButtonBox.Close)
@@ -551,11 +561,12 @@ class DataPropsResultsDialog(QDialog):
             return
         self._apply_distribution(idx, combo.currentText())
 
-
     def _stats_to_html(self, fname, d):
         def fmt(x):
-            try: return f"{x:.6g}"
-            except Exception: return str(x)
+            try:
+                return f"{x:.6g}"
+            except Exception:
+                return str(x)
         rows = [
             ("Count", d["count"]),
             ("Mean", d["mean"]),
@@ -581,7 +592,7 @@ class DataPropsResultsDialog(QDialog):
         if sigma <= 0 or not np.isfinite(sigma):  # avoid divide-by-zero
             y = np.zeros_like(x)
         else:
-            y = (1.0 / (np.sqrt(2*np.pi) * sigma)) * np.exp(-0.5*((x - mu)/sigma)**2)
+            y = (1.0 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(-0.5 * ((x - mu) / sigma)**2)
         return x, y
 
     def _stats_from_normal(self, vals, mu, sigma):
@@ -604,14 +615,14 @@ class DataPropsResultsDialog(QDialog):
     def _pdf_t(self, vals, df, loc, scale):
         import scipy.stats as st
         x = np.linspace(np.min(vals), np.max(vals), 400)
-        y = st.t.pdf((x - loc)/scale, df) / scale
+        y = st.t.pdf((x - loc) / scale, df) / scale
         return x, y
 
     def _stats_from_t(self, vals, df, loc, scale):
         # Theoretical moments (when defined)
         # mean exists if df>1, variance exists if df>2
         mean = loc if df > 1 else np.nan
-        var = (df * scale**2)/(df - 2) if df > 2 else np.nan
+        var = (df * scale**2) / (df - 2) if df > 2 else np.nan
         std = np.sqrt(var) if np.isfinite(var) else np.nan
         median = loc  # symmetric
         return dict(
@@ -623,6 +634,7 @@ class DataPropsResultsDialog(QDialog):
             max=float(np.max(vals)),
             df=float(df),
         )
+
     def _stats_from_sample(self, vals):
         vals = np.asarray(vals, dtype=float)
         return dict(
@@ -636,9 +648,11 @@ class DataPropsResultsDialog(QDialog):
 
     def _pdf_uniform(self, vals):
         # U(a,b) with a=min, b=max
-        a = float(np.min(vals)); b = float(np.max(vals))
+        a = float(np.min(vals))
+        b = float(np.max(vals))
         if not np.isfinite(a) or not np.isfinite(b) or b <= a:
-            x = np.linspace(a, a + 1.0, 400); y = np.zeros_like(x)
+            x = np.linspace(a, a + 1.0, 400)
+            y = np.zeros_like(x)
             return x, y
         x = np.linspace(a, b, 400)
         y = np.full_like(x, 1.0 / (b - a))
@@ -654,7 +668,7 @@ class DataPropsResultsDialog(QDialog):
 
         try:
             import scipy.stats as st
-            params = st.expon.fit(v, floc=0)      
+            params = st.expon.fit(v, floc=0)
             scale = float(params[-1])
         except Exception:
             m = float(np.mean(v))
@@ -683,7 +697,6 @@ class DataPropsResultsDialog(QDialog):
         return x, y_pos
 
 
-
 # ----------------Functions for utilities ----------------
 
 
@@ -707,8 +720,6 @@ def ensure_cluster_field(layer) -> int:
 
 
 # ---------------- main plugin ----------------
-from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
-
 
 
 # Time-series point picker tool
@@ -726,7 +737,8 @@ class TSPointPickTool(QgsMapTool):
     def canvasReleaseEvent(self, e):
         pt = self.toMapCoordinates(e.pos())
         tol_mu = self.pixel_tolerance * self.canvas.mapUnitsPerPixel()
-        search_rect = QgsRectangle(pt.x() - tol_mu, pt.y() - tol_mu, pt.x() + tol_mu, pt.y() + tol_mu)
+        search_rect = QgsRectangle(pt.x() - tol_mu, pt.y() - tol_mu,
+                                   pt.x() + tol_mu, pt.y() + tol_mu)
         click_geom = QgsGeometry.fromPointXY(QgsPointXY(pt))
 
         best = (None, None, float("inf"))  # (layer, feature, distance)
@@ -767,10 +779,9 @@ class TSPointPickTool(QgsMapTool):
         self.picked.emit(best[0], best[1])
 
 
-from qgis.PyQt.QtCore import QObject, QEvent
-
 class _DlgGuard(QObject):
     """Stops TS picker when the toolbox dialog hides/closes on any platform/Qt build."""
+
     def __init__(self, owner):
         super().__init__()
         self._owner = owner  # InSAR_TS_Toolbox instance
@@ -787,8 +798,6 @@ class _DlgGuard(QObject):
             except Exception:
                 pass
         return False
-
-
 
 
 # ---------------- main plugin ----------------
@@ -818,6 +827,7 @@ class InSAR_TS_Toolbox:
         if self.dlg is None:
             self.dlg = InSAR_TS_ToolboxDialog()
             # Ensure picker stops when dialog closes/hides, without event filters
+
             def _wrap_close(ev):
                 try:
                     self._stop_ts_pick()
@@ -838,36 +848,40 @@ class InSAR_TS_Toolbox:
                         ev.accept()
 
             self.dlg.closeEvent = _wrap_close
-            self.dlg.hideEvent  = _wrap_hide
+            self.dlg.hideEvent = _wrap_hide
 
             # Also for destruction via QObject::destroyed
             self.dlg.destroyed.connect(lambda _obj=None: self._stop_ts_pick())
 
-
             self.dlg.resize(1000, 700)
             self.dlg.setWindowTitle("InSAR-TS Toolbox")
-            btn_cluster = getattr(self.dlg, 'btnRunCluster', None) or getattr(self.dlg, 'btnRun', None)
+            btn_cluster = getattr(self.dlg, 'btnRunCluster',
+                                  None) or getattr(self.dlg, 'btnRun', None)
             if btn_cluster:
-                try: btn_cluster.clicked.disconnect()
-                except Exception: pass
+                try:
+                    btn_cluster.clicked.disconnect()
+                except Exception:
+                    pass
                 btn_cluster.clicked.connect(self.run_clustering)
 
             btn_dp = getattr(self.dlg, 'btnRunDataProps', None)
             if btn_dp:
-                try: btn_dp.clicked.disconnect()
-                except Exception: pass
+                try:
+                    btn_dp.clicked.disconnect()
+                except Exception:
+                    pass
                 btn_dp.clicked.connect(self.on_data_properties)
 
             self.dlg.comboAlgorithm.currentTextChanged.connect(self.on_algorithm_changed)
             self.dlg.stackedParams.currentChanged.connect(self._on_params_page_changed)
-            
+
             # Inject TS Analysis tab entirely in code
             self._inject_ts_tab()
             self._inject_help_tab()
             self.dlg.accepted.connect(self._stop_ts_pick)
             self.dlg.rejected.connect(self._stop_ts_pick)
             self.dlg.finished.connect(lambda _code: self._stop_ts_pick())
-          
+
         return self.dlg
 
     # --- TS Analysis tab (created in code) ---
@@ -944,6 +958,7 @@ class InSAR_TS_Toolbox:
         except Exception:
             pass
         self.btnPickTS.clicked.connect(self.start_ts_pick)
+
     def _show_about_dialog(self):
         from qgis.PyQt.QtWidgets import QMessageBox
 
@@ -999,7 +1014,7 @@ class InSAR_TS_Toolbox:
         dlg = self.dlg
         tabw = dlg.findChild(QTabWidget)
         if tabw is None:
-            return 
+            return
 
         tab = QWidget(dlg)
         root = QVBoxLayout(tab)
@@ -1139,12 +1154,9 @@ class InSAR_TS_Toolbox:
         </p>
         """
 
-
         helpBox.setHtml(help_html)
         root.addWidget(helpBox, 1)
         tabw.addTab(tab, "Help")
-
-
 
     def _on_help_anchor_clicked(self, url: QUrl):
         s = url.toString()
@@ -1158,7 +1170,6 @@ class InSAR_TS_Toolbox:
             self._open_url_external(s)
         except Exception:
             QDesktopServices.openUrl(QUrl(s))
-
 
     def _force_pan(self):
         """Hard switch to Pan tool to guarantee picker is gone."""
@@ -1175,8 +1186,6 @@ class InSAR_TS_Toolbox:
         except Exception:
             return False
 
-
-
     def _open_url_external(self, url_str: str):
 
         chrome_path = None
@@ -1186,9 +1195,12 @@ class InSAR_TS_Toolbox:
             # Common install locations
             if not chrome_path:
                 candidates = [
-                    os.path.join(os.environ.get("PROGRAMFILES", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                    os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+                    os.path.join(os.environ.get("PROGRAMFILES", ""), "Google",
+                                 "Chrome", "Application", "chrome.exe"),
+                    os.path.join(os.environ.get("PROGRAMFILES(X86)", ""),
+                                 "Google", "Chrome", "Application", "chrome.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google",
+                                 "Chrome", "Application", "chrome.exe"),
                 ]
                 chrome_path = next((p for p in candidates if p and os.path.exists(p)), None)
 
@@ -1199,7 +1211,6 @@ class InSAR_TS_Toolbox:
 
         # Non-Windows or Chrome not found → open with default browser
         QDesktopServices.openUrl(QUrl(url_str))
-
 
     def _restore_canvas_tool(self, force_pan=False):
         try:
@@ -1228,6 +1239,7 @@ class InSAR_TS_Toolbox:
         finally:
             self._rectTool = None
             self._prevTool = None
+
     def _reset_ts_tab(self):
         """Clear TS Analysis UI so the toolbox opens fresh."""
         # stop any active pick tool
@@ -1263,6 +1275,7 @@ class InSAR_TS_Toolbox:
         self.action.triggered.connect(self.run)
         self.iface.addToolBarIcon(self.action)
         self.iface.addPluginToMenu("InSAR-TS Toolbox", self.action)
+
     def _is_layer_visible(self, layer) -> bool:
         try:
             node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
@@ -1289,7 +1302,6 @@ class InSAR_TS_Toolbox:
         self.iface.removePluginMenu("InSAR-TS Toolbox", self.action)
         self.iface.removeToolBarIcon(self.action)
 
-
     def run(self):
         self._ensure_dialog()
         self._reset_ts_tab()
@@ -1311,7 +1323,6 @@ class InSAR_TS_Toolbox:
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Unchecked)
             lst.addItem(item)
-
 
     def on_algorithm_changed(self, name: str):
         name_l = (name or "").strip().lower()
@@ -1351,12 +1362,15 @@ class InSAR_TS_Toolbox:
             QMessageBox.critical(self.iface.mainWindow(), "Error", "No active layer selected.")
             return
         if layer.geometryType() != QgsWkbTypes.PointGeometry:
-            QMessageBox.critical(self.iface.mainWindow(), "Error", "Selected layer is not a point layer.")
+            QMessageBox.critical(self.iface.mainWindow(), "Error",
+                                 "Selected layer is not a point layer.")
             return
         if layer.providerType() == 'delimitedtext':
-            QMessageBox.information(self.iface.mainWindow(), "CSV Layer", "CSV detected. Copying to memory layer.")
+            QMessageBox.information(self.iface.mainWindow(), "CSV Layer",
+                                    "CSV detected. Copying to memory layer.")
             mem = QgsVectorLayer(f"Point?crs={layer.crs().authid()}", "Editable Copy", "memory")
-            mem.dataProvider().addAttributes(layer.fields()); mem.updateFields()
+            mem.dataProvider().addAttributes(layer.fields())
+            mem.updateFields()
             mem.dataProvider().addFeatures(list(layer.getFeatures()))
             QgsProject.instance().addMapLayer(mem, addToLegend=True)
             self.iface.setActiveLayer(mem)
@@ -1368,7 +1382,8 @@ class InSAR_TS_Toolbox:
                     for i in range(self.dlg.listFeatures.count())
                     if self.dlg.listFeatures.item(i).checkState() == Qt.Checked]
         if not selected:
-            QMessageBox.warning(self.iface.mainWindow(), "No Features Selected", "Select at least one field.")
+            QMessageBox.warning(self.iface.mainWindow(), "No Features Selected",
+                                "Select at least one field.")
             return
 
         params = {}
@@ -1471,8 +1486,8 @@ class InSAR_TS_Toolbox:
                     w.deleteLater()
 
         if not hasattr(self, "featuresForm") or self.featuresForm is None:
-            return  
-        
+            return
+
         # Build a mask for time-series fields
         ts_name_re = re.compile(r'^\d{6,8}$')   # e.g., 20190106 / 2019...
 
@@ -1485,14 +1500,13 @@ class InSAR_TS_Toolbox:
         attrs = feature.attributes()
         fields = layer.fields()
 
-   
         for idx, fld in enumerate(fields):
             name = fld.name()
-            if ts_name_re.match(name): 
+            if ts_name_re.match(name):
                 continue
-    
+
             if name.lower() in {"x", "y"} and layer.geometryType() != QgsWkbTypes.PointGeometry:
-                pass  
+                pass
 
             val = attrs[idx]
             if val is None:
@@ -1533,7 +1547,7 @@ class InSAR_TS_Toolbox:
 
     def start_ts_pick(self):
         layer = self.iface.activeLayer()
-        if self._tsPickTool: 
+        if self._tsPickTool:
             self._stop_ts_pick()
             return
 
@@ -1541,7 +1555,7 @@ class InSAR_TS_Toolbox:
             QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
                                 "Please select a point layer as active.")
             return
-        
+
         if not self._is_layer_visible(layer):
             QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
                                 f"Active layer '{layer.name()}' is hidden. "
@@ -1549,7 +1563,8 @@ class InSAR_TS_Toolbox:
             return
         canvas = self.iface.mapCanvas()
         self._prevTool = canvas.mapTool()
-        self._tsPickTool = TSPointPickTool(self.iface.mapCanvas(), layer, iface=self.iface, pixel_tolerance=8)
+        self._tsPickTool = TSPointPickTool(
+            self.iface.mapCanvas(), layer, iface=self.iface, pixel_tolerance=8)
 
         self._tsPickTool.picked.connect(self._on_ts_point_picked)
         canvas.setMapTool(self._tsPickTool)
@@ -1593,7 +1608,6 @@ class InSAR_TS_Toolbox:
                 self.lblTSInfo.setText("Picking stopped.")
             if hasattr(self, 'btnPickTS') and self.btnPickTS:
                 self.btnPickTS.setText("Pick a point on map")
-
 
     def _restore_tool_after_ts(self):
         try:
@@ -1663,7 +1677,8 @@ class InSAR_TS_Toolbox:
             c.setParent(None)
             c.deleteLater()
 
-        canvas = TimeSeriesCanvas(xs, ys, title=f"Time series for ID #{feature.id()} – Displacement")
+        canvas = TimeSeriesCanvas(
+            xs, ys, title=f"Time series for ID #{feature.id()} – Displacement")
         container.layout().addWidget(canvas)
 
         if hasattr(self, 'lblTSInfo') and self.lblTSInfo:
@@ -1679,8 +1694,6 @@ class InSAR_TS_Toolbox:
         self.dlg.show()
         self.dlg.raise_()
         self.dlg.activateWindow()
-
-    
 
     def _data_props_show_intro(self) -> bool:
 
@@ -1713,8 +1726,6 @@ class InSAR_TS_Toolbox:
 
         return res == QMessageBox.Ok
 
-
-   
     def on_data_properties(self):
 
         if not self._data_props_show_intro():
@@ -1726,7 +1737,8 @@ class InSAR_TS_Toolbox:
             return
         layer = d.selectedLayer()
         if layer is None:
-            QMessageBox.warning(self.iface.mainWindow(), "Data Properties", "No vector layer selected.")
+            QMessageBox.warning(self.iface.mainWindow(), "Data Properties",
+                                "No vector layer selected.")
             return
         roi_needed = d.chkUseROI.isChecked()
 
@@ -1739,7 +1751,8 @@ class InSAR_TS_Toolbox:
 
             fields = sd.selected_fields()
             if not fields:
-                QMessageBox.information(self.iface.mainWindow(), "Data Properties", "No numeric fields selected.")
+                QMessageBox.information(self.iface.mainWindow(),
+                                        "Data Properties", "No numeric fields selected.")
                 QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
                 return
             opts = sd.requested_stats()
@@ -1753,7 +1766,8 @@ class InSAR_TS_Toolbox:
                     rect = xform.transform(rect)
                 req.setFilterRect(rect)
 
-            attr_idx = [layer.fields().indexFromName(f) for f in fields if layer.fields().indexFromName(f) != -1]
+            attr_idx = [layer.fields().indexFromName(f)
+                                     for f in fields if layer.fields().indexFromName(f) != -1]
 
             if rect is None and layer.selectedFeatureIds():
                 req_sel = QgsFeatureRequest(layer.selectedFeatureIds())
@@ -1768,13 +1782,14 @@ class InSAR_TS_Toolbox:
                 feats = list(layer.getFeatures(req))
 
             if not feats:
-                QMessageBox.information(self.iface.mainWindow(), "Data Properties", "No features in the selected area.")
+                QMessageBox.information(self.iface.mainWindow(),
+                                        "Data Properties", "No features in the selected area.")
                 QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
                 return
 
             # Compute stats and prep plot data
             stats_per_field = []
-            plot_data = []   
+            plot_data = []
 
             for fname in fields:
                 idx = layer.fields().indexFromName(fname)
@@ -1810,10 +1825,10 @@ class InSAR_TS_Toolbox:
                     plot_data.append((fname, vals, int(opts["bins"])))
 
             if not stats_per_field and not plot_data:
-                QMessageBox.information(self.iface.mainWindow(), "Data Properties", "No numeric results to show.")
+                QMessageBox.information(self.iface.mainWindow(),
+                                        "Data Properties", "No numeric results to show.")
                 QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
                 return
-
 
             def fmt(x):
                 try:
@@ -1821,7 +1836,7 @@ class InSAR_TS_Toolbox:
                 except Exception:
                     return str(x)
 
-            order  = ["count", "mean", "median", "std", "min", "max"]
+            order = ["count", "mean", "median", "std", "min", "max"]
             labels = {"count": "Count", "mean": "Mean", "median": "Median",
                     "std": "Std. Dev.", "min": "Min", "max": "Max"}
             vals_map = {}
@@ -1845,7 +1860,8 @@ class InSAR_TS_Toolbox:
                 sections.append({"name": fname, "html": html, "vals": vals, "bins": bins_used})
 
             if not sections:
-                QMessageBox.information(self.iface.mainWindow(), "Data Properties", "No numeric results to show.")
+                QMessageBox.information(self.iface.mainWindow(),
+                                        "Data Properties", "No numeric results to show.")
                 QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
                 return
 
