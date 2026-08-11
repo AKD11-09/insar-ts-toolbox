@@ -61,6 +61,22 @@ from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
 # GitHub link
 GITHUB_URL = "https://github.com/AKD11-09/insar-ts-toolbox"
 
+
+def _plugin_version():
+    """Read the version from metadata.txt so it is declared in exactly one place."""
+    try:
+        import configparser
+        cfg = configparser.ConfigParser()
+        with open(os.path.join(os.path.dirname(__file__), 'metadata.txt'),
+                  encoding='utf-8') as fh:
+            cfg.read_file(fh)
+        return cfg.get('general', 'version')
+    except Exception:
+        return 'unknown'
+
+
+PLUGIN_VERSION = _plugin_version()
+
 # Matplotlib (Qt canvas)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -933,7 +949,7 @@ class InSAR_TS_Toolbox:
 
         text = f"""
         <h2>InSAR-TS Toolbox</h2>
-        <p><b>Version:</b> 1.0.0 (2025-11-22)</p>
+        <p><b>Version:</b> {PLUGIN_VERSION}</p>
 
         <p>This QGIS plugin was developed at the
         Geodätisches Institut Hannover (GIH), Leibniz University Hannover, 
@@ -1094,6 +1110,15 @@ class InSAR_TS_Toolbox:
                 distortions that FFT would produce in such cases.
             </li>
         </ul>
+
+        <h4>Requirements</h4>
+        <p><b>numpy</b>, <b>pandas</b>, <b>matplotlib</b> and <b>scipy</b> ship with the
+        standard QGIS installers and need no action.</p>
+        <p><b>scikit-learn</b> is <i>not</i> bundled with QGIS and is required only by the
+        Clustering tab. To install it, open the OSGeo4W Shell (Windows) and run
+        <code>python -m pip install scikit-learn</code>, or on Linux/macOS run
+        <code>python3 -m pip install scikit-learn</code> against the Python that QGIS uses.
+        Restart QGIS afterwards.</p>
 
         <h4>Troubleshooting</h4>
         <ul>
@@ -1308,8 +1333,16 @@ class InSAR_TS_Toolbox:
             from sklearn.preprocessing import StandardScaler
             return KMeans, DBSCAN, StandardScaler
         except Exception as e:
-            QMessageBox.critical(self.iface.mainWindow(), "Missing dependency",
-                                 f"scikit-learn is required.\n\n{e}")
+            QMessageBox.critical(
+                self.iface.mainWindow(), "Missing dependency",
+                "scikit-learn is required for the Clustering tab, but it is not "
+                "installed in the Python environment used by QGIS.\n\n"
+                "On Windows, open the OSGeo4W Shell and run:\n"
+                "    python -m pip install scikit-learn\n\n"
+                "On Linux/macOS, run:\n"
+                "    python3 -m pip install scikit-learn\n\n"
+                "Restart QGIS afterwards. The other tabs work without it.\n\n"
+                f"Details: {e}")
             raise
 
     def run_clustering(self):

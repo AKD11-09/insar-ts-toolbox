@@ -43,6 +43,39 @@ The information line shows the layer name, feature ID, and the number of epochs 
 
 ---
 
+## 📦 Requirements
+
+QGIS 3.0 or later, with Python 3.
+
+| Package | Used for | Ships with QGIS? |
+|---|---|---|
+| `numpy` | numerics throughout | ✅ yes |
+| `pandas` | tabular handling of time series | ✅ yes |
+| `matplotlib` | time-series, spectrum and histogram plots | ✅ yes |
+| `scipy` | Lomb–Scargle periodogram, distribution fits | ✅ yes |
+| `scikit-learn` | KMeans and DBSCAN clustering | ❌ **no — install manually** |
+
+`numpy`, `pandas`, `matplotlib` and `scipy` are bundled with the standard QGIS
+installers (OSGeo4W on Windows, and the official macOS/Linux packages), so no action
+is normally needed.
+
+**`scikit-learn` is not bundled** and must be installed into the Python environment
+that QGIS uses. Only the *Clustering* tab needs it — the other tabs work without it.
+
+- **Windows (OSGeo4W):** open the *OSGeo4W Shell* from the Start menu and run
+  ```bash
+  python -m pip install scikit-learn
+  ```
+- **Linux / macOS:** install into the Python that QGIS uses, e.g.
+  ```bash
+  python3 -m pip install scikit-learn
+  ```
+
+Restart QGIS afterwards. To confirm from inside QGIS, open *Plugins → Python Console*
+and run `import sklearn; print(sklearn.__version__)`.
+
+---
+
 ## 📥 Installation
 1. Clone this repository:
    ```bash

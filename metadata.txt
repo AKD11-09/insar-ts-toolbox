@@ -2,7 +2,7 @@
 name=InSAR-TS Toolbox
 qgisMinimumVersion=3.0
 description=A toolbox for InSAR time-series analysis and visualization.
-version=1.0
+version=1.0.0
 license=GPL-2.0-or-later
 author=Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, Mohammad Omidalizarandi
 email=ashwinkumard.11@gmail.com, kourosh.shahryari@gih.uni-hannover.de, zarandi@gih.uni-hannover.de

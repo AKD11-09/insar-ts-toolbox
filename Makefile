@@ -48,7 +48,7 @@ PY_FILES = \
 
 UI_FILES = insar_ts_toolbox_dialog_base.ui
 
-EXTRAS = metadata.txt icon.png LICENSE README.md
+EXTRAS = metadata.txt icon.png LICENSE README.md requirements.txt
 
 EXTRA_DIRS =
 
