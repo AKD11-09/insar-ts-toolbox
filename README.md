@@ -2,7 +2,7 @@
 
 [![QGIS](https://img.shields.io/badge/QGIS-3.x-green.svg)](https://qgis.org) 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/) 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: GPL v2+](https://img.shields.io/badge/License-GPL%20v2%2B-blue.svg)](LICENSE)
 
 A QGIS plugin for **time series analysis of InSAR data** (Persistent Scatterer and Distributed Scatterer points).  
 It provides clustering, descriptive statistics, spectral analysis, and visualization tools for InSAR time series data within QGIS.
@@ -61,3 +61,15 @@ The information line shows the layer name, feature ID, and the number of epochs 
 Developed at the **Geodätisches Institut Hannover (GIH)**, Leibniz University Hannover.
 
 This work was supported by a **DAAD (German Academic Exchange Service) Research Grant**.
+
+---
+
+## 📄 License
+
+Copyright © 2025–2026 Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, Mohammad Omidalizarandi.
+
+This program is free software; you can redistribute it and/or modify it under the
+terms of the **GNU General Public License version 2**, or (at your option) any later
+version. See [LICENSE](LICENSE) for the full text.
+
+This plugin builds on the QGIS Python API, which is itself GPL-2.0-or-later.
