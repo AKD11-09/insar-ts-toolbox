@@ -1,8 +1,9 @@
 [general]
 name=InSAR-TS Toolbox
 qgisMinimumVersion=3.0
+qgisMaximumVersion=4.99
 description=A toolbox for InSAR time-series analysis and visualization.
-version=1.0.0
+version=1.0.1
 license=GPL-2.0-or-later
 author=Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, Mohammad Omidalizarandi
 email=ashwinkumard.11@gmail.com, kourosh.shahryari@gih.uni-hannover.de, zarandi@gih.uni-hannover.de
@@ -13,7 +14,9 @@ tracker=https://github.com/AKD11-09/insar-ts-toolbox/issues
 repository=https://github.com/AKD11-09/insar-ts-toolbox
 
 hasProcessingProvider=no
-changelog=Initial public release
+changelog=
+    1.0.1 - Runs on QGIS 4 (Qt6) as well as QGIS 3.
+    1.0.0 - Initial public release
 
 tags=InSAR, time series analysis, displacement, remote sensing, temporal, spatio-temporal, clustering, anomaly detection, visualization
 homepage=https://github.com/AKD11-09/insar-ts-toolbox

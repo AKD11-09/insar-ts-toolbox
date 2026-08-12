@@ -32,13 +32,18 @@ import shutil
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+try:
+    # matplotlib >= 3.5: binding-agnostic backend, works under Qt5 and Qt6
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+except ImportError:
+    # older matplotlib, Qt5 only
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.ticker import MaxNLocator, EngFormatter
 from matplotlib import dates as mdates
 
 # Qt
 from qgis.PyQt.QtCore import (
-    Qt, pyqtSignal, QVariant, QTimer, QUrl, QProcess, QSettings, QObject, QEvent
+    Qt, pyqtSignal, QTimer, QUrl, QProcess, QSettings, QObject, QEvent
 )
 from qgis.PyQt.QtGui import QIcon, QColor, QDesktopServices
 from qgis.PyQt.QtWidgets import (
@@ -53,12 +58,61 @@ from qgis.core import (
     QgsProject, QgsField, QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer,
     QgsRendererCategory, QgsCategorizedSymbolRenderer, QgsSymbol, QgsWkbTypes,
     QgsFeatureRequest, QgsCoordinateTransform, QgsRectangle, QgsStatisticalSummary,
-    QgsStyle, edit, QgsMessageLog, Qgis, QgsMapLayer
+    QgsStyle, edit, QgsMessageLog, Qgis
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
 
 # Local UI
 from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
+
+# ---------------------------------------------------------------------------
+# QGIS 3 / QGIS 4 compatibility
+#
+# QGIS 4 runs on Qt6, which removed the QVariant type ids, and several QGIS
+# enums moved onto the Qgis class in later 3.x releases with the old spellings
+# dropped in 4.0. Each block below prefers the QGIS 4 spelling and falls back
+# to the QGIS 3 one, so a single code base loads on both.
+# ---------------------------------------------------------------------------
+try:                                                    # QGIS >= 3.30
+    GEOM_POINT = Qgis.GeometryType.Point
+    GEOM_POLYGON = Qgis.GeometryType.Polygon
+    GEOM_NULL = Qgis.GeometryType.Null
+except AttributeError:
+    GEOM_POINT = QgsWkbTypes.PointGeometry
+    GEOM_POLYGON = QgsWkbTypes.PolygonGeometry
+    GEOM_NULL = QgsWkbTypes.NullGeometry
+
+try:                                                    # QGIS >= 3.36
+    REQ_NO_GEOMETRY = Qgis.FeatureRequestFlag.NoGeometry
+except AttributeError:
+    REQ_NO_GEOMETRY = QgsFeatureRequest.NoGeometry
+
+try:                                                    # QGIS >= 3.36
+    STAT_MEAN = Qgis.Statistic.Mean
+    STAT_MEDIAN = Qgis.Statistic.Median
+    STAT_STDEV = Qgis.Statistic.StDev
+    STAT_MIN = Qgis.Statistic.Min
+    STAT_MAX = Qgis.Statistic.Max
+except AttributeError:
+    STAT_MEAN = QgsStatisticalSummary.Mean
+    STAT_MEDIAN = QgsStatisticalSummary.Median
+    STAT_STDEV = QgsStatisticalSummary.StDev
+    STAT_MIN = QgsStatisticalSummary.Min
+    STAT_MAX = QgsStatisticalSummary.Max
+
+try:                                                    # QGIS >= 3.4
+    MSG_INFO = Qgis.MessageLevel.Info
+except AttributeError:
+    MSG_INFO = Qgis.Info
+
+# QgsField takes a QMetaType.Type from QGIS 3.38 on; before that a QVariant
+# type id, which does not exist under Qt6 at all.
+if Qgis.QGIS_VERSION_INT >= 33800:
+    from qgis.PyQt.QtCore import QMetaType
+    FIELD_TYPE_INT = QMetaType.Type.Int
+else:
+    from qgis.PyQt.QtCore import QVariant
+    FIELD_TYPE_INT = QVariant.Int
 
 # GitHub link
 GITHUB_URL = "https://github.com/AKD11-09/insar-ts-toolbox"
@@ -83,7 +137,7 @@ PLUGIN_VERSION = _plugin_version()
 # Send a message to QGIS log (and stdout as fallback)
 def _log(msg):
     try:
-        QgsMessageLog.logMessage(str(msg), 'InSAR-TS Toolbox', Qgis.Info)
+        QgsMessageLog.logMessage(str(msg), 'InSAR-TS Toolbox', MSG_INFO)
     except Exception:
         print('[InSAR-TS Toolbox]', msg)
 
@@ -103,7 +157,7 @@ class RectangleMapTool(QgsMapTool):
         self.start = self.toMapCoordinates(e.pos())
         if self.rubber:
             self.canvas.scene().removeItem(self.rubber)
-        self.rubber = QgsRubberBand(self.canvas, QgsWkbTypes.PolygonGeometry)
+        self.rubber = QgsRubberBand(self.canvas, GEOM_POLYGON)
         self.rubber.setStrokeColor(QColor(0, 0, 0))
         self.rubber.setFillColor(QColor(0, 0, 0, 0))
         self.rubber.setWidth(2)
@@ -153,7 +207,8 @@ class LayerAreaDialog(QDialog):
         layout.addLayout(hl)
         self.chkUseROI = QCheckBox("Limit to area (draw rectangle on map)")
         layout.addWidget(self.chkUseROI)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        ok_cancel = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        btns = QDialogButtonBox(ok_cancel)
         layout.addWidget(btns)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
@@ -173,9 +228,9 @@ class StatsChoiceDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Numeric fields:"))
         self.listFields = QListWidget()
-        self.listFields.setSelectionMode(QListWidget.MultiSelection)
+        self.listFields.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         for f in layer.fields():
-            if f.type() in (QVariant.Int, QVariant.Double):
+            if f.isNumeric():
                 it = QListWidgetItem(f.name())
                 it.setSelected(True)
                 self.listFields.addItem(it)
@@ -202,7 +257,8 @@ class StatsChoiceDialog(QDialog):
         self.spinBins.setValue(20)
         hl.addWidget(self.spinBins)
         layout.addLayout(hl)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        ok_cancel = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        btns = QDialogButtonBox(ok_cancel)
         layout.addWidget(btns)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
@@ -457,7 +513,7 @@ class DataPropsResultsDialog(QDialog):
             stats.setOpenExternalLinks(False)
             stats.setStyleSheet("font-size: 11.5pt;")
             stats.setHtml(sec.get("html", ""))
-            stats.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            stats.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             stats.setMinimumWidth(260)
             stats.setMaximumWidth(380)
 
@@ -502,7 +558,7 @@ class DataPropsResultsDialog(QDialog):
             self._apply_distribution(idx, combo.currentText())
 
         v.addStretch(1)
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         btns.rejected.connect(self.reject)
         btns.accepted.connect(self.accept)
         root.addWidget(btns)
@@ -705,7 +761,7 @@ def ensure_cluster_field(layer) -> int:
     if idx != -1:
         return idx
 
-    fld = QgsField('cluster_id', QVariant.Int)   # modern ctor
+    fld = QgsField('cluster_id', FIELD_TYPE_INT)  # see the compat block above
     fld.setTypeName('Integer')                   # optional, helps some providers
     fld.setLength(10)
     fld.setPrecision(0)
@@ -732,7 +788,7 @@ class TSPointPickTool(QgsMapTool):
         self.layers = layers if isinstance(layers, (list, tuple)) else [layers]
         self.iface = iface
         self.pixel_tolerance = int(max(2, pixel_tolerance))
-        self.setCursor(Qt.CrossCursor)
+        self.setCursor(Qt.CursorShape.CrossCursor)
 
     def canvasReleaseEvent(self, e):
         pt = self.toMapCoordinates(e.pos())
@@ -747,7 +803,7 @@ class TSPointPickTool(QgsMapTool):
             # skip hidden / non-point layers just in case
             try:
                 node = QgsProject.instance().layerTreeRoot().findLayer(lyr.id())
-                if not node or not node.isVisible() or lyr.geometryType() != QgsWkbTypes.PointGeometry:
+                if not node or not node.isVisible() or lyr.geometryType() != GEOM_POINT:
                     continue
             except Exception:
                 continue
@@ -770,7 +826,7 @@ class TSPointPickTool(QgsMapTool):
             # nice message but non-blocking
             try:
                 self.iface.messageBar().pushMessage(
-                    "TS Analysis", "No visible point feature under cursor.", level=Qgis.Info, duration=2
+                    "TS Analysis", "No visible point feature under cursor.", level=MSG_INFO, duration=2
                 )
             except Exception:
                 pass
@@ -788,9 +844,9 @@ class _DlgGuard(QObject):
 
     def eventFilter(self, obj, ev):
         # Build a set of supported event types defensively
-        types = {QEvent.Hide, QEvent.Close, QEvent.WindowStateChange}
-        if hasattr(QEvent, "HideToParent"):   # not always present
-            types.add(getattr(QEvent, "HideToParent"))
+        types = {QEvent.Type.Hide, QEvent.Type.Close, QEvent.Type.WindowStateChange}
+        if hasattr(QEvent.Type, "HideToParent"):   # not always present
+            types.add(QEvent.Type.HideToParent)
 
         if ev.type() in types:
             try:
@@ -915,7 +971,7 @@ class InSAR_TS_Toolbox:
         root.addLayout(top)
 
         # === Splitter (plot left | attributes right) ===
-        splitter = QSplitter(Qt.Horizontal, tab)
+        splitter = QSplitter(Qt.Orientation.Horizontal, tab)
 
         # Left: plot container
         left = QWidget(splitter)
@@ -923,7 +979,7 @@ class InSAR_TS_Toolbox:
         left.setLayout(QVBoxLayout())
         left.layout().setContentsMargins(0, 0, 0, 0)
         self.frameTSPlot = left
-        left.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        left.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Right: attributes (scrollable)
         right = QWidget(splitter)
@@ -938,10 +994,10 @@ class InSAR_TS_Toolbox:
         self.featuresScroll.setWidgetResizable(True)
         self.featuresHost = QWidget()
         self.featuresForm = QFormLayout(self.featuresHost)
-        self.featuresForm.setLabelAlignment(Qt.AlignLeft)
-        self.featuresForm.setFormAlignment(Qt.AlignTop)
+        self.featuresForm.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.featuresForm.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         self.featuresScroll.setWidget(self.featuresHost)
-        self.featuresScroll.setFrameShape(QFrame.StyledPanel)
+        self.featuresScroll.setFrameShape(QFrame.Shape.StyledPanel)
         right_v.addWidget(self.featuresScroll, 1)
 
         splitter.addWidget(left)
@@ -1003,11 +1059,11 @@ class InSAR_TS_Toolbox:
 
         mb = QMessageBox(self.iface.mainWindow())
         mb.setWindowTitle("About InSAR-TS Toolbox")
-        mb.setIcon(QMessageBox.Information)
-        mb.setTextFormat(Qt.RichText)
+        mb.setIcon(QMessageBox.Icon.Information)
+        mb.setTextFormat(Qt.TextFormat.RichText)
         mb.setText(text)
-        mb.setStandardButtons(QMessageBox.Ok)
-        mb.exec_()
+        mb.setStandardButtons(QMessageBox.StandardButton.Ok)
+        mb.exec()
 
     def _inject_help_tab(self):
 
@@ -1312,16 +1368,16 @@ class InSAR_TS_Toolbox:
     # ---------------- Dialog setup ----------------
     def populate_feature_combo(self):
         layer = self.iface.activeLayer()
-        if not layer or not layer.type() == QgsMapLayer.VectorLayer:
+        if not isinstance(layer, QgsVectorLayer):
             return
 
-        numeric = [f.name() for f in layer.fields() if f.type() in (QVariant.Int, QVariant.Double)]
+        numeric = [f.name() for f in layer.fields() if f.isNumeric()]
         lst = self.dlg.listFeatures
         lst.clear()
         for name in numeric:
             item = QListWidgetItem(name)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
             lst.addItem(item)
 
     def on_algorithm_changed(self, name: str):
@@ -1361,7 +1417,7 @@ class InSAR_TS_Toolbox:
         if not layer:
             QMessageBox.critical(self.iface.mainWindow(), "Error", "No active layer selected.")
             return
-        if layer.geometryType() != QgsWkbTypes.PointGeometry:
+        if layer.geometryType() != GEOM_POINT:
             QMessageBox.critical(self.iface.mainWindow(), "Error",
                                  "Selected layer is not a point layer.")
             return
@@ -1380,7 +1436,7 @@ class InSAR_TS_Toolbox:
 
         selected = [self.dlg.listFeatures.item(i).text()
                     for i in range(self.dlg.listFeatures.count())
-                    if self.dlg.listFeatures.item(i).checkState() == Qt.Checked]
+                    if self.dlg.listFeatures.item(i).checkState() == Qt.CheckState.Checked]
         if not selected:
             QMessageBox.warning(self.iface.mainWindow(), "No Features Selected",
                                 "Select at least one field.")
@@ -1505,7 +1561,7 @@ class InSAR_TS_Toolbox:
             if ts_name_re.match(name):
                 continue
 
-            if name.lower() in {"x", "y"} and layer.geometryType() != QgsWkbTypes.PointGeometry:
+            if name.lower() in {"x", "y"} and layer.geometryType() != GEOM_POINT:
                 pass
 
             val = attrs[idx]
@@ -1524,7 +1580,7 @@ class InSAR_TS_Toolbox:
 
             key_lbl = QLabel(name + ":")
             val_lbl = QLabel(sval)
-            val_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            val_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.featuresForm.addRow(key_lbl, val_lbl)
 
         # -------- TS Analysis (pick & plot) --------
@@ -1539,7 +1595,7 @@ class InSAR_TS_Toolbox:
 
         result = []
         for lyr in render_order:
-            if isinstance(lyr, QgsVectorLayer) and lyr.geometryType() == QgsWkbTypes.PointGeometry:
+            if isinstance(lyr, QgsVectorLayer) and lyr.geometryType() == GEOM_POINT:
                 node = root.findLayer(lyr.id())
                 if node and node.isVisible():
                     result.append(lyr)
@@ -1551,7 +1607,7 @@ class InSAR_TS_Toolbox:
             self._stop_ts_pick()
             return
 
-        if not layer or layer.geometryType() != QgsWkbTypes.PointGeometry:
+        if not layer or layer.geometryType() != GEOM_POINT:
             QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
                                 "Please select a point layer as active.")
             return
@@ -1687,8 +1743,8 @@ class InSAR_TS_Toolbox:
                 f"Layer: {lyr_name}  •  Feature ID: {feature.id()}  •  {len(xs)} epochs"
             )
 
-        self.dlg.setWindowModality(Qt.NonModal)
-        self.dlg.setWindowState(self.dlg.windowState() & ~Qt.WindowMinimized)
+        self.dlg.setWindowModality(Qt.WindowModality.NonModal)
+        self.dlg.setWindowState(self.dlg.windowState() & ~Qt.WindowState.WindowMinimized)
         self._render_feature_attributes(layer, feature, title_prefix="Attributes")
 
         self.dlg.show()
@@ -1703,7 +1759,7 @@ class InSAR_TS_Toolbox:
             return True
 
         mb = QMessageBox(self.iface.mainWindow())
-        mb.setIcon(QMessageBox.Information)
+        mb.setIcon(QMessageBox.Icon.Information)
         mb.setWindowTitle("Data Properties – How it works")
         mb.setText(
             "This tool computes summary statistics and inline histograms for a chosen layer or ROI."
@@ -1717,14 +1773,14 @@ class InSAR_TS_Toolbox:
         )
         cb = QCheckBox("Don’t show this again")
         mb.setCheckBox(cb)
-        mb.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        mb.setDefaultButton(QMessageBox.Ok)
+        mb.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        mb.setDefaultButton(QMessageBox.StandardButton.Ok)
 
-        res = mb.exec_()
+        res = mb.exec()
         if cb.isChecked():
             s.setValue(key, True)
 
-        return res == QMessageBox.Ok
+        return res == QMessageBox.StandardButton.Ok
 
     def on_data_properties(self):
 
@@ -1733,7 +1789,7 @@ class InSAR_TS_Toolbox:
         parent = self._ensure_dialog()
 
         d = LayerAreaDialog(self.iface, parent)
-        if not d.exec_():
+        if not d.exec():
             return
         layer = d.selectedLayer()
         if layer is None:
@@ -1745,7 +1801,7 @@ class InSAR_TS_Toolbox:
         def proceed_with_rect(rect):
 
             sd = StatsChoiceDialog(layer, parent)
-            if not sd.exec_():
+            if not sd.exec():
                 QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
                 return
 
@@ -1759,7 +1815,7 @@ class InSAR_TS_Toolbox:
 
             # ROI-aware request
             req = QgsFeatureRequest()
-            if rect is not None and layer.geometryType() != QgsWkbTypes.NullGeometry:
+            if rect is not None and layer.geometryType() != GEOM_NULL:
                 canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
                 if layer.crs() != canvas_crs:
                     xform = QgsCoordinateTransform(canvas_crs, layer.crs(), QgsProject.instance())
@@ -1773,12 +1829,12 @@ class InSAR_TS_Toolbox:
                 req_sel = QgsFeatureRequest(layer.selectedFeatureIds())
                 if attr_idx:
                     req_sel.setSubsetOfAttributes(attr_idx)
-                req_sel.setFlags(QgsFeatureRequest.NoGeometry)
+                req_sel.setFlags(REQ_NO_GEOMETRY)
                 feats = list(layer.getFeatures(req_sel))
             else:
                 if attr_idx:
                     req.setSubsetOfAttributes(attr_idx)
-                req.setFlags(QgsFeatureRequest.NoGeometry)
+                req.setFlags(REQ_NO_GEOMETRY)
                 feats = list(layer.getFeatures(req))
 
             if not feats:
@@ -1814,11 +1870,11 @@ class InSAR_TS_Toolbox:
                 stats_per_field.append(dict(
                     name=fname,
                     count=len(vals),
-                    mean=ss.statistic(QgsStatisticalSummary.Mean),
-                    median=ss.statistic(QgsStatisticalSummary.Median),
-                    std=ss.statistic(QgsStatisticalSummary.StDev),
-                    min=ss.statistic(QgsStatisticalSummary.Min),
-                    max=ss.statistic(QgsStatisticalSummary.Max),
+                    mean=ss.statistic(STAT_MEAN),
+                    median=ss.statistic(STAT_MEDIAN),
+                    std=ss.statistic(STAT_STDEV),
+                    min=ss.statistic(STAT_MIN),
+                    max=ss.statistic(STAT_MAX),
                 ))
 
                 if opts["histogram"]:
@@ -1867,7 +1923,7 @@ class InSAR_TS_Toolbox:
 
             dlg2 = DataPropsResultsDialog(parent, "Data Properties (Summary)", sections)
             dlg2.resize(1100, 700)
-            dlg2.exec_()
+            dlg2.exec()
 
             QTimer.singleShot(0, lambda: self._restore_canvas_tool(force_pan=True))
 
