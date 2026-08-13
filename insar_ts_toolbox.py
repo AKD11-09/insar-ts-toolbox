@@ -45,7 +45,7 @@ from matplotlib import dates as mdates
 from qgis.PyQt.QtCore import (
     Qt, pyqtSignal, QTimer, QUrl, QProcess, QSettings, QObject, QEvent
 )
-from qgis.PyQt.QtGui import QIcon, QColor, QDesktopServices
+from qgis.PyQt.QtGui import QIcon, QColor, QDesktopServices, QTextCursor
 from qgis.PyQt.QtWidgets import (
     QAction, QMessageBox, QFileDialog, QPushButton, QDialog, QVBoxLayout,
     QHBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem,
@@ -116,6 +116,9 @@ else:
 
 # GitHub link
 GITHUB_URL = "https://github.com/AKD11-09/insar-ts-toolbox"
+
+# Submenu under the QGIS Plugins menu
+MENU_TITLE = "InSAR-TS Toolbox"
 
 
 def _plugin_version():
@@ -245,9 +248,9 @@ class StatsChoiceDialog(QDialog):
         self.chkCount = QCheckBox("Count")
         self.chkHist = QCheckBox("Histogram")
 
-        for w in (self.chkMean, self.chkMedian, self.chkStd, self.chkMin, self.chkMax, self.chkCount, self.chkHist):
+        for w in (self.chkMean, self.chkMedian, self.chkStd, self.chkMin,
+                  self.chkMax, self.chkCount, self.chkHist):
             layout.addWidget(w)
-        for w in (self.chkMean, self.chkMedian, self.chkStd, self.chkMin, self.chkMax, self.chkCount):
             w.setChecked(True)
 
         hl = QHBoxLayout()
@@ -497,7 +500,7 @@ class DataPropsResultsDialog(QDialog):
         v.setContentsMargins(6, 6, 6, 6)
         v.setSpacing(10)
 
-        for idx, sec in enumerate(sections):
+        for sec in sections:
             name = sec.get("name", "")
             vals = np.asarray(sec.get("vals", []), dtype=float)
             vals = vals[np.isfinite(vals)]
@@ -515,6 +518,14 @@ class DataPropsResultsDialog(QDialog):
             stats.setHtml(sec.get("html", ""))
             stats.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             stats.setMinimumWidth(260)
+
+            # Histogram switched off, or too few values to fit a curve: show the
+            # stats full width instead of an empty plot frame beside them.
+            if vals.size < 2:
+                box_l.addWidget(stats, 1)
+                v.addWidget(box)
+                continue
+
             stats.setMaximumWidth(380)
 
             # RIGHT: controls + histogram
@@ -546,16 +557,19 @@ class DataPropsResultsDialog(QDialog):
             box_l.addWidget(stats, 0)
             box_l.addWidget(right, 1)
             v.addWidget(box)
+
+            # Index into self.cards, which skips histogram-less sections
+            card_index = len(self.cards)
             self.cards.append(dict(
                 name=name, vals=vals, bins=bins, stats=stats, canvas=canvas, combo=combo
             ))
 
             # Connect callback
-            combo.setProperty("card_index", idx)
+            combo.setProperty("card_index", card_index)
             combo.currentIndexChanged.connect(self._on_combo_changed)
 
             # Initial fit (Normal)
-            self._apply_distribution(idx, combo.currentText())
+            self._apply_distribution(card_index, combo.currentText())
 
         v.addStretch(1)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -800,10 +814,11 @@ class TSPointPickTool(QgsMapTool):
         best = (None, None, float("inf"))  # (layer, feature, distance)
 
         for lyr in self.layers:
-            # skip hidden / non-point layers just in case
+            # Only skip layers that cannot yield a time series. Visibility is
+            # settled by the caller before the tool is created; re-testing it
+            # here used to swallow the click and report "no feature".
             try:
-                node = QgsProject.instance().layerTreeRoot().findLayer(lyr.id())
-                if not node or not node.isVisible() or lyr.geometryType() != GEOM_POINT:
+                if lyr is None or lyr.geometryType() != GEOM_POINT:
                     continue
             except Exception:
                 continue
@@ -867,6 +882,14 @@ class InSAR_TS_Toolbox:
         self._rectTool = None
         self._prevTool = None
         self._tsPickTool = None
+        self.action = None
+        self.actionSep = None
+        self.actionHelp = None
+        self.actionAbout = None
+        self.helpBox = None
+        self.btnHelpContents = None
+        self.btnHelpAbout = None
+        self._help_html = ""
 
     # ---------------- GUI ----------------
     def _ensure_dialog(self):
@@ -1015,10 +1038,9 @@ class InSAR_TS_Toolbox:
             pass
         self.btnPickTS.clicked.connect(self.start_ts_pick)
 
-    def _show_about_dialog(self):
-        from qgis.PyQt.QtWidgets import QMessageBox
-
-        text = f"""
+    def _about_html(self):
+        """The About text, shared by the Help tab and the menu's About box."""
+        return f"""
         <h2>InSAR-TS Toolbox</h2>
         <p><b>Version:</b> {PLUGIN_VERSION}</p>
 
@@ -1057,11 +1079,14 @@ class InSAR_TS_Toolbox:
         <p>&copy; 2025 – Ashwin Kumar Dhanasekaran et al.</p>
         """
 
+    def _show_about_dialog(self):
+        from qgis.PyQt.QtWidgets import QMessageBox
+
         mb = QMessageBox(self.iface.mainWindow())
         mb.setWindowTitle("About InSAR-TS Toolbox")
         mb.setIcon(QMessageBox.Icon.Information)
         mb.setTextFormat(Qt.TextFormat.RichText)
-        mb.setText(text)
+        mb.setText(self._about_html())
         mb.setStandardButtons(QMessageBox.StandardButton.Ok)
         mb.exec()
 
@@ -1075,6 +1100,18 @@ class InSAR_TS_Toolbox:
         tab = QWidget(dlg)
         root = QVBoxLayout(tab)
         root.setContentsMargins(8, 8, 8, 8)
+
+        # The two options a Help menu conventionally offers, in the tab itself
+        btnrow = QHBoxLayout()
+        self.btnHelpContents = QPushButton("Help Contents", tab)
+        self.btnHelpAbout = QPushButton("About", tab)
+        for b in (self.btnHelpContents, self.btnHelpAbout):
+            b.setCheckable(True)
+            btnrow.addWidget(b)
+        btnrow.addStretch(1)
+        root.addLayout(btnrow)
+        self.btnHelpContents.clicked.connect(lambda: self._show_help_page("help"))
+        self.btnHelpAbout.clicked.connect(lambda: self._show_help_page("about"))
 
         helpBox = QTextBrowser(tab)
         helpBox.setOpenExternalLinks(False)
@@ -1196,6 +1233,8 @@ class InSAR_TS_Toolbox:
         <li><b>No feature under cursor</b>: zoom in and try again (picker uses a small pixel tolerance).</li>
         <li><b>No time-series fields found</b>: ensure fields are named like <code>YYYYMMDD</code> and contain numeric values.</li>
         <li><b>Empty stats</b>: ensure numeric fields were selected and ROI contains features.</li>
+        <li><b>Layer not drawn on the map</b>: the toolbox offers to switch the layer (and any
+        group above it) back on before picking, or to pick from it as it is.</li>
         </ul>
 
         <h4>Acknowledgements</h4>
@@ -1210,15 +1249,30 @@ class InSAR_TS_Toolbox:
         </p>
         """
 
-        helpBox.setHtml(help_html)
+        self.helpBox = helpBox
+        self._help_html = help_html
+        self._show_help_page("help")
         root.addWidget(helpBox, 1)
         tabw.addTab(tab, "Help")
+
+    def _show_help_page(self, page):
+        """Switch the Help tab between the manual and the About text."""
+        is_about = (page == "about")
+        if getattr(self, "btnHelpContents", None):
+            self.btnHelpContents.setChecked(not is_about)
+        if getattr(self, "btnHelpAbout", None):
+            self.btnHelpAbout.setChecked(is_about)
+        if getattr(self, "helpBox", None) is None:
+            return
+        self.helpBox.setHtml(self._about_html() if is_about else self._help_html)
+        self.helpBox.moveCursor(QTextCursor.MoveOperation.Start)
+        self.helpBox.ensureCursorVisible()
 
     def _on_help_anchor_clicked(self, url: QUrl):
         s = url.toString()
         # internal "about" link from Help tab
         if s.startswith("about:insar-ts-toolbox"):
-            self._show_about_dialog()
+            self._show_help_page("about")
             return
 
         # everything else → open in browser
@@ -1327,18 +1381,66 @@ class InSAR_TS_Toolbox:
 
     def initGui(self):
         icon = QIcon(os.path.join(os.path.dirname(__file__), "icon.png"))
-        self.action = QAction(icon, "InSAR-TS Toolbox", self.iface.mainWindow())
+        self.action = QAction(icon, MENU_TITLE, self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addToolBarIcon(self.action)
-        self.iface.addPluginToMenu("InSAR-TS Toolbox", self.action)
+        self.iface.addPluginToMenu(MENU_TITLE, self.action)
 
-    def _is_layer_visible(self, layer) -> bool:
+        # Help entries, separated from the toolbox itself
+        self.actionSep = QAction(self.iface.mainWindow())
+        self.actionSep.setSeparator(True)
+        self.iface.addPluginToMenu(MENU_TITLE, self.actionSep)
+
+        self.actionHelp = QAction("Help Contents", self.iface.mainWindow())
+        self.actionHelp.triggered.connect(self.show_help_contents)
+        self.iface.addPluginToMenu(MENU_TITLE, self.actionHelp)
+
+        self.actionAbout = QAction("About", self.iface.mainWindow())
+        self.actionAbout.triggered.connect(self._show_about_dialog)
+        self.iface.addPluginToMenu(MENU_TITLE, self.actionAbout)
+
+    def show_help_contents(self):
+        """Open the toolbox with the Help tab in front."""
+        self.run()
+        tabw = self.dlg.findChild(QTabWidget)
+        if tabw is not None:
+            for i in range(tabw.count()):
+                if tabw.tabText(i) == "Help":
+                    tabw.setCurrentIndex(i)
+                    break
+        self._show_help_page("help")
+        self.dlg.raise_()
+        self.dlg.activateWindow()
+
+    def _layer_visibility_state(self, layer):
+        """Return (visible, reason, node) for a layer in the current layer tree.
+
+        reason is one of 'ok', 'unchecked', 'group', 'not-in-tree', 'error'.
+        Callers need the reason, not just a bool: QgsLayerTreeNode.isVisible()
+        is recursive, so a layer the user has ticked still reports False when a
+        group above it is switched off, and a missing tree node is not the same
+        thing as a hidden layer.
+        """
         try:
             node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
-            return bool(node and node.isVisible())
-        except Exception:
-            # If we can't resolve visibility (shouldn't happen), be conservative
-            return False
+        except Exception as exc:
+            _log(f"visibility check failed for '{layer.name()}': {exc!r}")
+            return False, 'error', None
+
+        if node is None:
+            # Registered but absent from the tree (added with addToLegend=False,
+            # or a tree still being assembled). Its features are readable, so
+            # treat it as pickable rather than refusing.
+            _log(f"'{layer.name()}' has no layer-tree node; treating as pickable")
+            return True, 'not-in-tree', None
+
+        if not node.itemVisibilityChecked():
+            return False, 'unchecked', node
+
+        if not node.isVisible():        # ticked, so an ancestor group is off
+            return False, 'group', node
+
+        return True, 'ok', node
 
     def unload(self):
         try:
@@ -1355,7 +1457,9 @@ class InSAR_TS_Toolbox:
         except Exception:
             pass
         self._reset_ts_tab()
-        self.iface.removePluginMenu("InSAR-TS Toolbox", self.action)
+        for act in (self.action, self.actionSep, self.actionHelp, self.actionAbout):
+            if act is not None:
+                self.iface.removePluginMenu(MENU_TITLE, act)
         self.iface.removeToolBarIcon(self.action)
 
     def run(self):
@@ -1601,22 +1705,96 @@ class InSAR_TS_Toolbox:
                     result.append(lyr)
         return result
 
-    def start_ts_pick(self):
+    def _resolve_ts_layer(self):
+        """The point layer to pick from, or None if the user must choose one.
+
+        Prefers the active layer. If that is not a point layer, falls back to
+        the single visible point layer when there is exactly one — clicking
+        inside the toolbox does not change the active layer, so insisting on it
+        strands users who only have one candidate anyway.
+        """
         layer = self.iface.activeLayer()
+        if isinstance(layer, QgsVectorLayer) and layer.geometryType() == GEOM_POINT:
+            return layer
+
+        candidates = self._visible_point_layers_in_render_order()
+        if not candidates:
+            # A single hidden point layer is still the obvious candidate; the
+            # visibility prompt then offers to switch it on, which is more use
+            # than telling the user to select a layer they already have.
+            for lyr in QgsProject.instance().mapLayers().values():
+                if not isinstance(lyr, QgsVectorLayer):
+                    continue
+                if lyr.geometryType() == GEOM_POINT:
+                    candidates.append(lyr)
+
+        if len(candidates) == 1:
+            only = candidates[0]
+            try:
+                self.iface.messageBar().pushMessage(
+                    "TS Analysis", f"Using the only point layer, '{only.name()}'.",
+                    level=MSG_INFO, duration=4)
+            except Exception:
+                pass
+            return only
+
+        if candidates:
+            QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
+                                "Several point layers are open. Click the one you "
+                                "want in the Layers panel, then pick again.")
+        else:
+            QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
+                                "Please select a point layer as active.")
+        return None
+
+    def _confirm_ts_layer_visible(self, layer) -> bool:
+        """Ask rather than refuse when the layer will not be drawn on the map."""
+        visible, reason, node = self._layer_visibility_state(layer)
+        if visible:
+            return True
+
+        if reason == 'group':
+            detail = (f"'{layer.name()}' is ticked, but a group above it is switched "
+                      "off, so its points are not drawn on the map.")
+        elif reason == 'unchecked':
+            detail = (f"'{layer.name()}' is unticked in the Layers panel, so its "
+                      "points are not drawn on the map.")
+        else:
+            detail = f"Could not determine whether '{layer.name()}' is visible."
+
+        mb = QMessageBox(self.iface.mainWindow())
+        mb.setIcon(QMessageBox.Icon.Question)
+        mb.setWindowTitle("TS Analysis")
+        mb.setText(detail)
+        mb.setInformativeText("Show the layer and start picking?")
+        btn_show = mb.addButton("Show layer and pick", QMessageBox.ButtonRole.AcceptRole)
+        btn_anyway = mb.addButton("Pick anyway", QMessageBox.ButtonRole.ActionRole)
+        mb.addButton(QMessageBox.StandardButton.Cancel)
+        mb.exec()
+
+        clicked = mb.clickedButton()
+        if clicked is btn_show:
+            if node is not None:
+                try:
+                    # Ticks the layer and every group above it
+                    node.setItemVisibilityCheckedParentRecursive(True)
+                except AttributeError:
+                    node.setItemVisibilityChecked(True)
+            return True
+        return clicked is btn_anyway
+
+    def start_ts_pick(self):
         if self._tsPickTool:
             self._stop_ts_pick()
             return
 
-        if not layer or layer.geometryType() != GEOM_POINT:
-            QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
-                                "Please select a point layer as active.")
+        layer = self._resolve_ts_layer()
+        if layer is None:
             return
 
-        if not self._is_layer_visible(layer):
-            QMessageBox.warning(self.iface.mainWindow(), "TS Analysis",
-                                f"Active layer '{layer.name()}' is hidden. "
-                                "Make it visible in the Layers panel to pick points.")
+        if not self._confirm_ts_layer_visible(layer):
             return
+
         canvas = self.iface.mapCanvas()
         self._prevTool = canvas.mapTool()
         self._tsPickTool = TSPointPickTool(
