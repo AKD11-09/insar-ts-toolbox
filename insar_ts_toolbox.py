@@ -184,8 +184,8 @@ class RectangleMapTool(QgsMapTool):
         try:
             if self.rubber:
                 self.canvas.scene().removeItem(self.rubber)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"could not remove the selection rubber band: {exc!r}")
         self.rubber = None
         super().deactivate()
 
@@ -820,7 +820,9 @@ class TSPointPickTool(QgsMapTool):
             try:
                 if lyr is None or lyr.geometryType() != GEOM_POINT:
                     continue
-            except Exception:
+            except (AttributeError, RuntimeError):
+                # No geometryType (not a vector layer) or the underlying C++
+                # object is gone: either way it cannot yield a time series.
                 continue
 
             req = QgsFeatureRequest().setFilterRect(search_rect)
@@ -843,8 +845,8 @@ class TSPointPickTool(QgsMapTool):
                 self.iface.messageBar().pushMessage(
                     "TS Analysis", "No visible point feature under cursor.", level=MSG_INFO, duration=2
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                _log(f"could not show the 'no feature' message: {exc!r}")
             return
 
         self.picked.emit(best[0], best[1])
@@ -866,8 +868,8 @@ class _DlgGuard(QObject):
         if ev.type() in types:
             try:
                 self._owner._stop_ts_pick()   # force-pan inside
-            except Exception:
-                pass
+            except Exception as exc:
+                _log(f"could not stop the TS picker on dialog hide: {exc!r}")
         return False
 
 
@@ -898,11 +900,11 @@ class InSAR_TS_Toolbox:
             if getattr(self, "dlg", None) is not None and hasattr(self, "_dlgGuard") and self._dlgGuard:
                 try:
                     self.dlg.removeEventFilter(self._dlgGuard)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not remove the legacy dialog guard: {exc!r}")
                 self._dlgGuard = None
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"legacy dialog guard cleanup failed: {exc!r}")
         if self.dlg is None:
             self.dlg = InSAR_TS_ToolboxDialog()
             # Ensure picker stops when dialog closes/hides, without event filters
@@ -939,16 +941,16 @@ class InSAR_TS_Toolbox:
             if btn_cluster:
                 try:
                     btn_cluster.clicked.disconnect()
-                except Exception:
-                    pass
+                except TypeError:
+                    pass    # nothing connected yet, which is the normal case
                 btn_cluster.clicked.connect(self.run_clustering)
 
             btn_dp = getattr(self.dlg, 'btnRunDataProps', None)
             if btn_dp:
                 try:
                     btn_dp.clicked.disconnect()
-                except Exception:
-                    pass
+                except TypeError:
+                    pass    # nothing connected yet, which is the normal case
                 btn_dp.clicked.connect(self.on_data_properties)
 
             self.dlg.comboAlgorithm.currentTextChanged.connect(self.on_algorithm_changed)
@@ -1034,8 +1036,8 @@ class InSAR_TS_Toolbox:
 
         try:
             self.btnPickTS.clicked.disconnect()
-        except Exception:
-            pass
+        except TypeError:
+            pass    # nothing connected yet, which is the normal case
         self.btnPickTS.clicked.connect(self.start_ts_pick)
 
     def _about_html(self):
@@ -1120,13 +1122,15 @@ class InSAR_TS_Toolbox:
         helpBox.setStyleSheet("font-size: 11pt; font-family: Segoe UI, Arial, sans-serif;")
         helpBox.setReadOnly(True)
 
-        help_html = f"""
+        # A plain string, not an f-string: nothing here is interpolated, and
+        # the f-prefix made security scanners read the prose as a built query.
+        help_html = """
         <style>
-        h2{{margin:0 0 12px 0; font-size: 14pt;}}
-        h3{{margin:14px 0 6px 0; font-size: 12pt;}}
-        ul{{margin:6px 0 10px 22px}}
-        li{{margin-bottom:6px; line-height:1.4;}}
-        code{{background:#f2f2f2;padding:1px 4px;border-radius:3px}}
+        h2{margin:0 0 12px 0; font-size: 14pt;}
+        h3{margin:14px 0 6px 0; font-size: 12pt;}
+        ul{margin:6px 0 10px 22px}
+        li{margin-bottom:6px; line-height:1.4;}
+        code{background:#f2f2f2;padding:1px 4px;border-radius:3px}
         </style>
 
         <h2>InSAR-TS Toolbox</h2>
@@ -1285,8 +1289,8 @@ class InSAR_TS_Toolbox:
         """Hard switch to Pan tool to guarantee picker is gone."""
         try:
             self.iface.actionPan().trigger()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"could not switch to the Pan tool: {exc!r}")
 
     def _is_ts_pick_active(self):
         try:
@@ -1332,8 +1336,8 @@ class InSAR_TS_Toolbox:
                 try:
                     if canvas.mapTool() is tool:
                         canvas.unsetMapTool(tool)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not unset the rectangle tool: {exc!r}")
 
             if prev is not None and not force_pan:
                 try:
@@ -1344,8 +1348,8 @@ class InSAR_TS_Toolbox:
             if force_pan or prev is None:
                 try:
                     self.iface.actionPan().trigger()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not switch to the Pan tool: {exc!r}")
         finally:
             self._rectTool = None
             self._prevTool = None
@@ -1355,8 +1359,8 @@ class InSAR_TS_Toolbox:
         # stop any active pick tool
         try:
             self._stop_ts_pick()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"could not stop the TS picker while resetting the tab: {exc!r}")
 
         # clear plot container
         container = getattr(self, 'frameTSPlot', None)
@@ -1447,15 +1451,15 @@ class InSAR_TS_Toolbox:
             if getattr(self, "dlg", None) is not None and hasattr(self, "_dlgGuard") and self._dlgGuard:
                 try:
                     self.dlg.removeEventFilter(self._dlgGuard)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not remove the legacy dialog guard on unload: {exc!r}")
                 self._dlgGuard = None
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"legacy dialog guard cleanup failed on unload: {exc!r}")
         try:
             self._stop_ts_pick()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"could not stop the TS picker on unload: {exc!r}")
         self._reset_ts_tab()
         for act in (self.action, self.actionSep, self.actionHelp, self.actionAbout):
             if act is not None:
@@ -1734,8 +1738,8 @@ class InSAR_TS_Toolbox:
                 self.iface.messageBar().pushMessage(
                     "TS Analysis", f"Using the only point layer, '{only.name()}'.",
                     level=MSG_INFO, duration=4)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log(f"could not show the 'only point layer' message: {exc!r}")
             return only
 
         if candidates:
@@ -1817,18 +1821,18 @@ class InSAR_TS_Toolbox:
             if getattr(self, "_tsPickTool", None) and mt is self._tsPickTool:
                 try:
                     canvas.unsetMapTool(self._tsPickTool)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not unset the TS pick tool: {exc!r}")
 
             # Belt-and-suspenders: if ANY TSPointPickTool is active, unset it
             if mt is not None and mt.__class__.__name__ == "TSPointPickTool":
                 try:
                     canvas.unsetMapTool(mt)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not unset the active TS pick tool: {exc!r}")
 
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"stopping the TS picker failed: {exc!r}")
         finally:
             # Always switch to Pan as a safe default
             self._force_pan()
@@ -1848,15 +1852,15 @@ class InSAR_TS_Toolbox:
             canvas = self.iface.mapCanvas()
             if getattr(self, "_tsPickTool", None) and canvas.mapTool() is self._tsPickTool:
                 canvas.unsetMapTool(self._tsPickTool)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log(f"could not unset the TS pick tool: {exc!r}")
         finally:
             self._tsPickTool = None
             if getattr(self, "_prevTool", None):
                 try:
                     self.iface.mapCanvas().setMapTool(self._prevTool)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log(f"could not restore the previous map tool: {exc!r}")
             self._prevTool = None
 
     def _on_ts_point_picked(self, layer, feature):
@@ -1891,8 +1895,8 @@ class InSAR_TS_Toolbox:
                 continue
             try:
                 v = float(v)
-            except Exception:
-                continue
+            except (TypeError, ValueError):
+                continue    # not a number, so it is not part of the series
             xs.append(d)
             ys.append(v)
 
@@ -2037,8 +2041,8 @@ class InSAR_TS_Toolbox:
                         continue
                     try:
                         vals.append(float(v))
-                    except Exception:
-                        pass
+                    except (TypeError, ValueError):
+                        pass    # skip cells that are not numbers
                 if not vals:
                     continue
 
