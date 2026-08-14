@@ -3,7 +3,7 @@ name=InSAR-TS Toolbox
 qgisMinimumVersion=3.0
 qgisMaximumVersion=4.99
 description=A toolbox for InSAR time-series analysis and visualization.
-version=1.0.2
+version=1.0.3
 license=GPL-2.0-or-later
 author=Ashwin Kumar Dhanasekaran, Kourosh Shahryarinia, Mohammad Omidalizarandi
 email=ashwinkumard.11@gmail.com, kourosh.shahryari@gih.uni-hannover.de, zarandi@gih.uni-hannover.de
@@ -15,6 +15,7 @@ repository=https://github.com/AKD11-09/insar-ts-toolbox
 
 hasProcessingProvider=no
 changelog=
+    1.0.3 - Clustering defaults to DBSCAN with eps 0.1.
     1.0.2 - TS Analysis no longer refuses to pick from a layer it reported as hidden;
             histograms are computed by default in Data Properties;
             Help Contents and About added to the plugin menu.
