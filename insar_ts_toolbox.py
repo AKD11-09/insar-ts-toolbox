@@ -72,20 +72,25 @@ from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
 # enums moved onto the Qgis class in later 3.x releases with the old spellings
 # dropped in 4.0. Each block below prefers the QGIS 4 spelling and falls back
 # to the QGIS 3 one, so a single code base loads on both.
+#
+# Both branches name the enum they read from (Qgis.GeometryType.Point rather
+# than QgsWkbTypes.PointGeometry). Qt6 requires that scoping and Qt5 accepts
+# it, and the repository's Qt6 checker reads the fallback branch statically -
+# it cannot see that the branch only runs on QGIS 3.
 # ---------------------------------------------------------------------------
 try:                                                    # QGIS >= 3.30
     GEOM_POINT = Qgis.GeometryType.Point
     GEOM_POLYGON = Qgis.GeometryType.Polygon
     GEOM_NULL = Qgis.GeometryType.Null
 except AttributeError:
-    GEOM_POINT = QgsWkbTypes.PointGeometry
-    GEOM_POLYGON = QgsWkbTypes.PolygonGeometry
-    GEOM_NULL = QgsWkbTypes.NullGeometry
+    GEOM_POINT = QgsWkbTypes.GeometryType.PointGeometry
+    GEOM_POLYGON = QgsWkbTypes.GeometryType.PolygonGeometry
+    GEOM_NULL = QgsWkbTypes.GeometryType.NullGeometry
 
 try:                                                    # QGIS >= 3.36
     REQ_NO_GEOMETRY = Qgis.FeatureRequestFlag.NoGeometry
 except AttributeError:
-    REQ_NO_GEOMETRY = QgsFeatureRequest.NoGeometry
+    REQ_NO_GEOMETRY = QgsFeatureRequest.Flag.NoGeometry
 
 try:                                                    # QGIS >= 3.36
     STAT_MEAN = Qgis.Statistic.Mean
@@ -94,16 +99,14 @@ try:                                                    # QGIS >= 3.36
     STAT_MIN = Qgis.Statistic.Min
     STAT_MAX = Qgis.Statistic.Max
 except AttributeError:
-    STAT_MEAN = QgsStatisticalSummary.Mean
-    STAT_MEDIAN = QgsStatisticalSummary.Median
-    STAT_STDEV = QgsStatisticalSummary.StDev
-    STAT_MIN = QgsStatisticalSummary.Min
-    STAT_MAX = QgsStatisticalSummary.Max
+    STAT_MEAN = QgsStatisticalSummary.Statistic.Mean
+    STAT_MEDIAN = QgsStatisticalSummary.Statistic.Median
+    STAT_STDEV = QgsStatisticalSummary.Statistic.StDev
+    STAT_MIN = QgsStatisticalSummary.Statistic.Min
+    STAT_MAX = QgsStatisticalSummary.Statistic.Max
 
-try:                                                    # QGIS >= 3.4
-    MSG_INFO = Qgis.MessageLevel.Info
-except AttributeError:
-    MSG_INFO = Qgis.Info
+# Qgis.MessageLevel predates the 3.x/4.x split, so no fallback is needed.
+MSG_INFO = Qgis.MessageLevel.Info
 
 # QgsField takes a QMetaType.Type from QGIS 3.38 on; before that a QVariant
 # type id, which does not exist under Qt6 at all.

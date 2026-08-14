@@ -17,7 +17,9 @@ hasProcessingProvider=no
 changelog=
     1.0.4 - Exception handlers report failures to the QGIS log instead of
             discarding them silently, and the Help text is a plain string.
-            Clears the plugin repository security scan.
+            The QGIS 3 fallbacks in the compatibility block name their enum
+            (Qgis.GeometryType.Point, not QgsWkbTypes.PointGeometry).
+            Clears the plugin repository security and Qt6 checks.
     1.0.3 - Clustering defaults to DBSCAN with eps 0.1.
     1.0.2 - TS Analysis no longer refuses to pick from a layer it reported as hidden;
             histograms are computed by default in Data Properties;
