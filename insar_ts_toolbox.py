@@ -73,10 +73,10 @@ from .insar_ts_toolbox_dialog import InSAR_TS_ToolboxDialog
 # dropped in 4.0. Each block below prefers the QGIS 4 spelling and falls back
 # to the QGIS 3 one, so a single code base loads on both.
 #
-# Both branches name the enum they read from (Qgis.GeometryType.Point rather
-# than QgsWkbTypes.PointGeometry). Qt6 requires that scoping and Qt5 accepts
-# it, and the repository's Qt6 checker reads the fallback branch statically -
-# it cannot see that the branch only runs on QGIS 3.
+# Both branches name the enum they read from, rather than reaching for a bare
+# member on the owning class. Qt6 requires that scoping and Qt5 accepts it,
+# and the repository's Qt6 checker reads the fallback branch statically - it
+# cannot see that the branch only ever runs on QGIS 3.
 # ---------------------------------------------------------------------------
 try:                                                    # QGIS >= 3.30
     GEOM_POINT = Qgis.GeometryType.Point
